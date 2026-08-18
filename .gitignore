@@ -1,0 +1,33 @@
+# --- Sanal ortamlar --------------------------------------------------------
+# Tasinabilir degiller (icinde makineye ozel mutlak yollar var) ve ~2 GB
+# tutuyorlar. Klonlayan kisi setup.bat ile kendi ortamini kurar.
+.venv/
+.venv+/
+.venv_broken_old/
+.qtcreator/
+
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+build/
+dist/
+
+# --- IDE / editor ----------------------------------------------------------
+# workspace.xml gibi dosyalar makineye ozel mutlak yollar tasir.
+.idea/
+.vscode/
+*.pyproject.user
+
+# --- Arac ciktilari --------------------------------------------------------
+# Kod tabanindan uretilen bilgi grafigi; kaynak degil, tekrar uretilebilir.
+graphify-out/
+.claude/
+
+# --- Gecici / yedek --------------------------------------------------------
+*.bak
+*.log
+*.tmp
+run_error.log

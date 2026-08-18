@@ -1,0 +1,11 @@
+{
+    "files": [
+        "main.py",
+        "requirements.txt",
+        "README.md",
+        "DESIGN.md",
+        "ARCHITECTURE.md",
+        "gcs/*.py",
+        "web/*.html"
+    ]
+}

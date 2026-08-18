@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BAHR-GCS Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    /* Token'lar gcs/theme.py ile birebir ayni tutulmalidir. */
+    :root {
+      --bg-canvas: #080E1A;
+      --surface-glass: rgba(14, 24, 38, 0.86);
+      --border-default: #26374C;
+      --border-strong: #38506D;
+      --text-primary: #EFF4FA;
+      --text-secondary: #A4B3C6;
+      --text-tertiary: #68798F;
+      --accent: #00A8F0;
+      --accent-soft: rgba(0, 168, 240, 0.18);
+      --info: #7AA2F7;
+      --warning: #FBBF24;
+      --danger: #F87171;
+      --success: #34D399;
+      --sample: #A78BFA;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-xl: 20px;
+      --font-ui: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", "Cascadia Mono", "Consolas", ui-monospace, monospace;
+    }
+
+    html, body, #map {
+      height: 100%;
+      margin: 0;
+      background: var(--bg-canvas);
+      font-family: var(--font-ui);
+      color: var(--text-primary);
+    }
+
+    .leaflet-container {
+      background: var(--bg-canvas);
+      font-family: var(--font-ui);
+      outline: none;
+    }
+
+    /* --- Leaflet kontrolleri --- */
+    .leaflet-bar,
+    .leaflet-control-layers,
+    .leaflet-control-attribution {
+      border: 1px solid var(--border-default) !important;
+      border-radius: var(--radius-md) !important;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42) !important;
+      backdrop-filter: blur(14px);
+      overflow: hidden;
+    }
+
+    .leaflet-bar a {
+      background: var(--surface-glass);
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-default);
+      width: 32px;
+      height: 32px;
+      line-height: 32px;
+      font-weight: 600;
+      transition: background 120ms ease, color 120ms ease;
+    }
+
+    .leaflet-bar a:hover {
+      background: #1A2839;
+      color: var(--text-primary);
+    }
+
+    .leaflet-bar a:last-child { border-bottom: none; }
+
+    .leaflet-control-attribution {
+      background: var(--surface-glass) !important;
+      color: var(--text-tertiary) !important;
+      font-size: 10px;
+      padding: 2px 8px !important;
+      border-radius: var(--radius-md) !important;
+    }
+    .leaflet-control-attribution a { color: var(--text-secondary); }
+
+    .leaflet-control-scale-line {
+      background: var(--surface-glass);
+      border: 1px solid var(--border-default);
+      border-top: none;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.4px;
+      padding: 2px 6px;
+      border-radius: 0 0 var(--radius-md) var(--radius-md);
+    }
+
+    /* --- Cam paneller --- */
+    .glass {
+      background: var(--surface-glass);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-xl);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(16px);
+    }
+
+    .hint-chip {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 16px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      color: var(--text-primary);
+      background: var(--surface-glass);
+      border: 1px solid var(--accent);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(16px);
+    }
+    .hint-chip.visible { display: flex; }
+    .hint-chip .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+    .hint-chip .key {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-tertiary);
+      border: 1px solid var(--border-strong);
+      border-radius: 5px;
+      padding: 1px 5px;
+    }
+
+    .sample-toggle {
+      font-family: var(--font-ui) !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      width: auto !important;
+      padding: 0 12px !important;
+      text-decoration: none;
+    }
+    .sample-toggle.off { color: var(--text-tertiary) !important; }
+    .sample-toggle.on { color: var(--accent) !important; background: var(--accent-soft) !important; }
+
+    /* --- Isaretciler --- */
+    .marker-reset { background: transparent; border: none; }
+
+    .vehicle-marker {
+      width: 34px; height: 34px;
+      display: grid; place-items: center;
+    }
+    .vehicle-marker .halo {
+      position: absolute;
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.16;
+      animation: pulse 2.4s ease-out infinite;
+    }
+    @keyframes pulse {
+      0%   { transform: scale(0.7); opacity: 0.30; }
+      70%  { transform: scale(1.25); opacity: 0.04; }
+      100% { transform: scale(1.25); opacity: 0; }
+    }
+    .vehicle-marker svg { position: relative; }
+
+    .wp-marker {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: rgba(8, 14, 26, 0.92);
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      font: 700 10px/20px var(--font-mono);
+      text-align: center;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+    }
+    .wp-marker.first { background: var(--accent); color: #03182E; }
+
+    .home-marker {
+      width: 26px; height: 26px;
+      border-radius: 8px;
+      background: rgba(8, 14, 26, 0.92);
+      border: 2px solid var(--success);
+      color: var(--success);
+      font: 700 10px/22px var(--font-ui);
+      text-align: center;
+      letter-spacing: 0.5px;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+    }
+
+    .leaflet-tooltip {
+      background: var(--surface-glass);
+      border: 1px solid var(--border-default);
+      border-radius: 7px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 2px 7px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+    }
+    .leaflet-tooltip::before { display: none; }
+
+    .measure-tooltip {
+      color: var(--text-primary);
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="hint-chip" id="drawHint">
+    <span class="dot"></span>
+    <span>Click to add vertices</span>
+    <span class="key">double-click = finish</span>
+  </div>
+
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const THEME = {
+      accent: "#00A8F0",
+      info: "#7AA2F7",
+      success: "#34D399",
+      warning: "#FBBF24",
+      danger: "#F87171",
+      sample: "#A78BFA",
+      textPrimary: "#EFF4FA"
+    };
+
+    const DEPTH_SCALE = [
+      { limit: 1, color: "#F87171" },
+      { limit: 3, color: "#FB923C" },
+      { limit: 6, color: "#FBBF24" },
+      { limit: 12, color: "#34D399" },
+      { limit: 25, color: "#5B8DEF" }
+    ];
+    const DEPTH_DEEP = "#7C5CFF";
+
+    let bridge = null;
+    let activePolygon = null;
+    let vehicleMarker = null;
+    let vehicleTrackLine = null;
+    let vehicleTrackGlow = null;
+    let vehicleTrackPoints = [];
+    let homeMarker = null;
+    let headingCone = null;
+    let headingConeVisible = true;
+    let measureMode = false;
+    let measurePoints = [];
+    let measureLine = null;
+    let gotoMode = false;
+    let gotoMarker = null;
+    let samplePointsVisible = true;
+    let drawingActive = false;
+    let draftPolygon = null;
+    let draftMarkers = [];
+    let draftPoints = [];
+    let lastVehicleLatLng = null;
+
+    const surveyLayer = L.layerGroup();
+    const waypointLayer = L.layerGroup();
+    const vehicleLayer = L.layerGroup();
+    const sampleLayer = L.layerGroup();
+    const heatmapLayer = L.layerGroup();
+    const mapToolsLayer = L.layerGroup();
+    const drawnItems = new L.FeatureGroup();
+
+    const map = L.map("map", {
+      zoomControl: false,
+      preferCanvas: true,
+      zoomAnimation: false,
+      fadeAnimation: false,
+      markerZoomAnimation: false,
+      attributionControl: true
+    }).setView([47.397742, 8.545594], 17);
+
+    /* Koyu tema ile uyumlu sokak haritasi */
+    const streetLayer = L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      {
+        maxZoom: 20,
+        subdomains: "abcd",
+        attribution: "&copy; OpenStreetMap &copy; CARTO"
+      }
+    ).addTo(map);
+
+    const satelliteLayer = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      {
+        maxZoom: 19,
+        attribution: "Tiles &copy; Esri"
+      }
+    );
+
+    const baseLayers = { street: streetLayer, satellite: satelliteLayer };
+    let activeBaseKey = "street";
+
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+    L.control.scale({ position: "bottomright", imperial: false, maxWidth: 130 }).addTo(map);
+
+    map.addLayer(drawnItems);
+    map.addLayer(heatmapLayer);
+    map.addLayer(surveyLayer);
+    map.addLayer(sampleLayer);
+    map.addLayer(waypointLayer);
+    map.addLayer(mapToolsLayer);
+    map.addLayer(vehicleLayer);
+
+    function setBaseLayer(key) {
+      const next = baseLayers[key];
+      if (!next || key === activeBaseKey) {
+        return;
+      }
+      map.removeLayer(baseLayers[activeBaseKey]);
+      next.addTo(map);
+      next.bringToBack();
+      activeBaseKey = key;
+    }
+
+    function focusVehicle() {
+      if (lastVehicleLatLng) {
+        map.setView(lastVehicleLatLng, Math.max(map.getZoom(), 17), { animate: false });
+      }
+    }
+
+    function depthColor(depth) {
+      for (const stop of DEPTH_SCALE) {
+        if (depth < stop.limit) {
+          return stop.color;
+        }
+      }
+      return DEPTH_DEEP;
+    }
+
+    /* ---------------- Poligon cizimi ---------------- */
+
+    function polygonToPayload(layer) {
+      return layer.getLatLngs()[0].map((point) => ({ lat: point.lat, lng: point.lng }));
+    }
+
+    function sendPolygon(layer) {
+      if (!bridge || !layer) {
+        return;
+      }
+      bridge.onPolygonUpdated(JSON.stringify(polygonToPayload(layer)));
+    }
+
+    function setDrawHint(visible) {
+      document.getElementById("drawHint").classList.toggle("visible", visible);
+    }
+
+    function clearDraft() {
+      if (draftPolygon) {
+        drawnItems.removeLayer(draftPolygon);
+        draftPolygon = null;
+      }
+      draftMarkers.forEach((marker) => drawnItems.removeLayer(marker));
+      draftMarkers = [];
+      draftPoints = [];
+    }
+
+    function startPolygonDrawing() {
+      clearDraft();
+      drawingActive = true;
+      measureMode = false;
+      gotoMode = false;
+      setDrawHint(true);
+    }
+
+    function finishPolygonDrawing() {
+      if (draftPoints.length < 3) {
+        return;
+      }
+      if (activePolygon) {
+        drawnItems.removeLayer(activePolygon);
+      }
+      activePolygon = L.polygon(draftPoints, {
+        color: THEME.accent,
+        weight: 2,
+        fillColor: THEME.accent,
+        fillOpacity: 0.06
+      });
+      drawnItems.addLayer(activePolygon);
+      clearDraft();
+      drawingActive = false;
+      setDrawHint(false);
+      sendPolygon(activePolygon);
+    }
+
+    function clearPolygon() {
+      clearDraft();
+      if (activePolygon) {
+        drawnItems.removeLayer(activePolygon);
+        activePolygon = null;
+      }
+      surveyLayer.clearLayers();
+      waypointLayer.clearLayers();
+      sampleLayer.clearLayers();
+      drawingActive = false;
+      setDrawHint(false);
+      if (bridge) {
+        bridge.onPolygonUpdated("[]");
+      }
+    }
+
+    function refreshDraftPolygon() {
+      if (draftPolygon) {
+        drawnItems.removeLayer(draftPolygon);
+      }
+      if (draftPoints.length >= 2) {
+        draftPolygon = L.polygon(draftPoints, {
+          color: THEME.warning,
+          weight: 2,
+          dashArray: "6, 5",
+          fillColor: THEME.warning,
+          fillOpacity: 0.05
+        });
+        drawnItems.addLayer(draftPolygon);
+      }
+    }
+
+    map.on("click", (event) => {
+      if (gotoMode) {
+        gotoMode = false;
+        if (gotoMarker) {
+          mapToolsLayer.removeLayer(gotoMarker);
+        }
+        gotoMarker = L.circleMarker(event.latlng, {
+          radius: 8,
+          color: THEME.warning,
+          fillColor: THEME.warning,
+          fillOpacity: 0.35,
+          weight: 2
+        }).addTo(mapToolsLayer);
+        if (bridge) {
+          bridge.onGotoSelected(event.latlng.lat, event.latlng.lng);
+        }
+        return;
+      }
+      if (measureMode) {
+        measurePoints.push(event.latlng);
+        if (measureLine) {
+          mapToolsLayer.removeLayer(measureLine);
+        }
+        if (measurePoints.length >= 2) {
+          measureLine = L.polyline(measurePoints, {
+            color: THEME.textPrimary,
+            dashArray: "5,6",
+            weight: 2
+          }).addTo(mapToolsLayer);
+          const distanceM = measurePoints.reduce((sum, point, index) => {
+            if (index === 0) {
+              return 0;
+            }
+            return sum + point.distanceTo(measurePoints[index - 1]);
+          }, 0);
+          const label = distanceM >= 1000
+            ? `${(distanceM / 1000).toFixed(2)} km`
+            : `${distanceM.toFixed(1)} m`;
+          measureLine.bindTooltip(label, {
+            permanent: true,
+            direction: "center",
+            className: "measure-tooltip"
+          }).openTooltip();
+        }
+        return;
+      }
+      if (!drawingActive) {
+        return;
+      }
+      draftPoints.push(event.latlng);
+      const marker = L.circleMarker(event.latlng, {
+        radius: 5,
+        color: THEME.warning,
+        fillColor: THEME.warning,
+        fillOpacity: 1,
+        weight: 2
+      }).addTo(drawnItems);
+      draftMarkers.push(marker);
+      refreshDraftPolygon();
+    });
+
+    map.on("dblclick", (event) => {
+      if (drawingActive) {
+        L.DomEvent.stop(event);
+        finishPolygonDrawing();
+      }
+    });
+
+    /* ---------------- Ornek nokta gorunurlugu ---------------- */
+
+    const sampleToggleControl = L.control({ position: "topleft" });
+    sampleToggleControl.onAdd = () => {
+      const container = L.DomUtil.create("div", "leaflet-bar");
+      container.innerHTML =
+        '<a href="#" id="toggleSamplesButton" class="sample-toggle on" title="Toggle sample points">Samples</a>';
+      return container;
+    };
+    sampleToggleControl.addTo(map);
+
+    map.whenReady(() => {
+      const button = document.getElementById("toggleSamplesButton");
+      if (!button) {
+        return;
+      }
+      L.DomEvent.disableClickPropagation(button);
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        samplePointsVisible = !samplePointsVisible;
+        button.classList.toggle("on", samplePointsVisible);
+        button.classList.toggle("off", !samplePointsVisible);
+        if (samplePointsVisible) {
+          map.addLayer(sampleLayer);
+        } else {
+          map.removeLayer(sampleLayer);
+        }
+      });
+    });
+
+    /* ---------------- Gorev katmani ---------------- */
+
+    function clearSurveyPath() {
+      surveyLayer.clearLayers();
+      waypointLayer.clearLayers();
+      sampleLayer.clearLayers();
+    }
+
+    function clearVehicleTrack() {
+      vehicleTrackPoints = [];
+      if (vehicleTrackLine) {
+        vehicleLayer.removeLayer(vehicleTrackLine);
+        vehicleTrackLine = null;
+      }
+      if (vehicleTrackGlow) {
+        vehicleLayer.removeLayer(vehicleTrackGlow);
+        vehicleTrackGlow = null;
+      }
+    }
+
+    function waypointIcon(index, isFirst) {
+      return L.divIcon({
+        className: "marker-reset",
+        html: `<div class="wp-marker${isFirst ? " first" : ""}">${index + 1}</div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+    }
+
+    function homeIcon() {
+      return L.divIcon({
+        className: "marker-reset",
+        html: '<div class="home-marker">H</div>',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
+      });
+    }
+
+    /* Tekne siluetti yukaridan gorunum, pruva yukari (heading 0 = kuzey). */
+    const HULL_PATH =
+      "M13 1 C16.5 5.5, 19.5 10, 19.5 15 L19.5 21.5 " +
+      "C19.5 23.5, 18.5 24.5, 17 24.5 L9 24.5 " +
+      "C7.5 24.5, 6.5 23.5, 6.5 21.5 L6.5 15 " +
+      "C6.5 10, 9.5 5.5, 13 1 Z";
+
+    function vehicleIcon(heading) {
+      return L.divIcon({
+        className: "marker-reset",
+        html:
+          '<div class="vehicle-marker"><span class="halo"></span>' +
+          `<svg width="26" height="26" viewBox="0 0 26 26" style="transform: rotate(${heading || 0}deg);">` +
+          `<path d="${HULL_PATH}" fill="${THEME.accent}" stroke="#03182E" stroke-width="1.3" stroke-linejoin="round"/>` +
+          '<rect x="9.6" y="11.5" width="6.8" height="7.5" rx="1.6" fill="#03182E" opacity="0.55"/>' +
+          `<path d="M13 4.5 L13 9.5" stroke="#03182E" stroke-width="1.1" stroke-linecap="round" opacity="0.45"/>` +
+          "</svg></div>",
+        iconSize: [34, 34],
+        iconAnchor: [17, 17]
+      });
+    }
+
+    function setSurveyPath(points) {
+      clearSurveyPath();
+      if (!points || points.length === 0) {
+        return;
+      }
+
+      const latLngs = points.map((point) => [point.lat, point.lng]);
+
+      L.polyline(latLngs, {
+        color: THEME.info,
+        weight: 9,
+        opacity: 0.12,
+        lineJoin: "round"
+      }).addTo(surveyLayer);
+
+      L.polyline(latLngs, {
+        color: THEME.info,
+        weight: 2.5,
+        opacity: 0.95,
+        lineJoin: "round"
+      }).addTo(surveyLayer);
+
+      points.forEach((point, index) => {
+        const marker = L.marker([point.lat, point.lng], {
+          draggable: true,
+          icon: waypointIcon(index, index === 0)
+        }).addTo(waypointLayer);
+
+        marker.bindTooltip(`WP ${index + 1}`, {
+          direction: "top",
+          offset: [0, -12]
+        });
+
+        marker.on("dragend", () => {
+          const moved = marker.getLatLng();
+          if (bridge) {
+            bridge.onWaypointMoved(index, moved.lat, moved.lng);
+          }
+        });
+      });
+
+      map.fitBounds(L.latLngBounds(latLngs), { padding: [48, 48] });
+    }
+
+    /* ---------------- Arac durumu ---------------- */
+
+    function trimVehicleTrack() {
+      if (vehicleTrackPoints.length > 500) {
+        vehicleTrackPoints = vehicleTrackPoints.slice(vehicleTrackPoints.length - 500);
+      }
+    }
+
+    function redrawVehicleTrack() {
+      if (!vehicleTrackGlow) {
+        vehicleTrackGlow = L.polyline([], {
+          color: THEME.success,
+          weight: 8,
+          opacity: 0.14,
+          smoothFactor: 1
+        }).addTo(vehicleLayer);
+      }
+      if (!vehicleTrackLine) {
+        vehicleTrackLine = L.polyline([], {
+          color: THEME.success,
+          weight: 2.5,
+          opacity: 0.95,
+          smoothFactor: 1
+        }).addTo(vehicleLayer);
+      }
+      vehicleTrackGlow.setLatLngs(vehicleTrackPoints);
+      vehicleTrackLine.setLatLngs(vehicleTrackPoints);
+    }
+
+    function updateHeadingCone(latLng, heading) {
+      if (headingCone) {
+        mapToolsLayer.removeLayer(headingCone);
+        headingCone = null;
+      }
+      if (!headingConeVisible) {
+        return;
+      }
+      const radius = 24;
+      const angle = (heading || 0) * (Math.PI / 180);
+      const spread = 0.42;
+      const metersToLat = (value) => value / 110540;
+      const metersToLng = (value) => value / (111320 * Math.cos(latLng[0] * Math.PI / 180));
+      const project = (distance, bearing) => [
+        latLng[0] + metersToLat(distance * Math.cos(bearing)),
+        latLng[1] + metersToLng(distance * Math.sin(bearing))
+      ];
+      headingCone = L.polygon(
+        [latLng, project(radius * 0.6, angle - spread), project(radius, angle), project(radius * 0.6, angle + spread)],
+        {
+          color: THEME.accent,
+          fillColor: THEME.accent,
+          fillOpacity: 0.14,
+          weight: 1,
+          opacity: 0.55
+        }
+      ).addTo(mapToolsLayer);
+    }
+
+    function updateVehicleState(point) {
+      if (!point) {
+        return;
+      }
+      const latLng = [point.lat, point.lng];
+      lastVehicleLatLng = latLng;
+      if (!vehicleMarker) {
+        vehicleMarker = L.marker(latLng, {
+          icon: vehicleIcon(point.heading),
+          zIndexOffset: 1000,
+          interactive: false
+        }).addTo(vehicleLayer);
+      } else {
+        vehicleMarker.setLatLng(latLng);
+        vehicleMarker.setIcon(vehicleIcon(point.heading));
+      }
+      updateHeadingCone(latLng, point.heading || 0);
+
+      if (point.appendTrack) {
+        const lastPoint = vehicleTrackPoints[vehicleTrackPoints.length - 1];
+        if (!lastPoint || lastPoint[0] !== latLng[0] || lastPoint[1] !== latLng[1]) {
+          vehicleTrackPoints.push(latLng);
+          trimVehicleTrack();
+          redrawVehicleTrack();
+        }
+      }
+    }
+
+    /* ---------------- Ornek noktalar / derinlik ---------------- */
+
+    function setSamplePoints(payload) {
+      sampleLayer.clearLayers();
+      if (!payload || !payload.points || payload.points.length === 0) {
+        return;
+      }
+      payload.points.forEach((point) => {
+        const marker = L.circleMarker([point.lat, point.lng], {
+          radius: payload.densityPreview ? 6 : 3.5,
+          color: THEME.sample,
+          fillColor: THEME.sample,
+          fillOpacity: payload.densityPreview ? 0.28 : 0.9,
+          weight: payload.densityPreview ? 1 : 0
+        }).addTo(sampleLayer);
+        if (payload.showNumbers && point.index) {
+          marker.bindTooltip(`S${point.index}`, {
+            permanent: true,
+            direction: "top",
+            offset: [0, -6]
+          });
+        }
+      });
+      if (!samplePointsVisible && map.hasLayer(sampleLayer)) {
+        map.removeLayer(sampleLayer);
+      }
+    }
+
+    function setHomePoint(point) {
+      if (!point) {
+        return;
+      }
+      const latLng = [point.lat, point.lng];
+      if (!homeMarker) {
+        homeMarker = L.marker(latLng, { icon: homeIcon(), interactive: false }).addTo(mapToolsLayer);
+      } else {
+        homeMarker.setLatLng(latLng);
+      }
+    }
+
+    function setHeadingConeVisible(visible) {
+      headingConeVisible = visible;
+      if (!visible && headingCone) {
+        mapToolsLayer.removeLayer(headingCone);
+        headingCone = null;
+      }
+    }
+
+    function setMeasureMode(enabled) {
+      measureMode = enabled;
+      measurePoints = [];
+      if (enabled) {
+        drawingActive = false;
+        gotoMode = false;
+        setDrawHint(false);
+      }
+      if (measureLine) {
+        mapToolsLayer.removeLayer(measureLine);
+        measureLine = null;
+      }
+    }
+
+    function setGotoMode(enabled) {
+      gotoMode = enabled;
+      if (enabled) {
+        drawingActive = false;
+        measureMode = false;
+        setDrawHint(false);
+      }
+    }
+
+    function setDepthHeatmap(points) {
+      heatmapLayer.clearLayers();
+      if (!points || points.length === 0) {
+        return;
+      }
+      points.forEach((point) => {
+        const color = depthColor(point.depth || 0);
+        L.circleMarker([point.lat, point.lng], {
+          radius: 7,
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.22,
+          weight: 0
+        }).addTo(heatmapLayer);
+        L.circleMarker([point.lat, point.lng], {
+          radius: 2.5,
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.95,
+          weight: 0
+        }).addTo(heatmapLayer);
+      });
+    }
+
+    new QWebChannel(qt.webChannelTransport, (channel) => {
+      bridge = channel.objects.bridge;
+      bridge.onMapReady();
+    });
+  </script>
+</body>
+</html>
