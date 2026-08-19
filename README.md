@@ -331,6 +331,8 @@ This project is a functional prototype with mission upload verification, adaptiv
 - broader autopilot compatibility testing (developed and tested primarily against ArduRover)
 - geofence support (`DO_FENCE_ENABLE`) is not yet exposed in the UI
 
+Current version: **v0.0.0** — see [CHANGELOG.md](CHANGELOG.md) for release history.
+
 ## License
 
 Released under the [MIT License](LICENSE) — Copyright (c) 2026 Oğuzcan VUR.

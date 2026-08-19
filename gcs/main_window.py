@@ -94,6 +94,7 @@ from gcs.models import DepthSample, MissionPoint, MissionStats, TelemetryData
 from gcs.theme import (
     APP_NAME,
     APP_TAGLINE_SHORT,
+    APP_VERSION,
     COLORS,
     Radius,
     Space,
@@ -2034,6 +2035,11 @@ class MainWindow(QMainWindow):
             f'font-family: "{mono_font_family()}"; font-size: {Type.caption}px;'
             f"color: {COLORS.text_tertiary};"
         )
+        self.version_label = QLabel(f"v{APP_VERSION}")
+        self.version_label.setStyleSheet(
+            f'font-family: "{mono_font_family()}"; font-size: {Type.caption}px;'
+            f"color: {COLORS.text_tertiary};"
+        )
 
         layout.addWidget(self.status_dot)
         layout.addWidget(self.status_message, 1)
@@ -2043,6 +2049,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.refresh_rate_label)
         layout.addWidget(v_divider(16))
         layout.addWidget(self.status_time)
+        layout.addWidget(v_divider(16))
+        layout.addWidget(self.version_label)
         return strip
 
     def _toggle_console(self, visible: bool) -> None:

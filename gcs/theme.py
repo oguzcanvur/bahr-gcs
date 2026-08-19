@@ -34,6 +34,11 @@ ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 # ---------------------------------------------------------------------------
 
 APP_NAME = "BAHR-GCS"
+# Semantic Versioning (semver.org): MAJOR.MINOR.PATCH. Bump PATCH for fixes,
+# MINOR for backward-compatible features, MAJOR for breaking changes. Bir
+# surum etiketlemek istediginde bunu guncelle, sonra `git tag vX.Y.Z` at —
+# tek kaynak burasi, baska hicbir dosyada surum numarasi tekrarlanmamali.
+APP_VERSION = "0.0.0"
 APP_ACRONYM_EXPANSION = "Bathymetric Autonomous Hydrographic Reconnaissance"
 APP_NAME_FULL = f"{APP_NAME} — {APP_ACRONYM_EXPANSION} Ground Control Station"
 APP_TAGLINE_SHORT = "HYDROGRAPHIC RECONNAISSANCE"          # üst çubuk, kısa
