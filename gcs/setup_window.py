@@ -251,10 +251,13 @@ class ParamGroupPage(SetupPage):
         self._mavlink = mavlink
         self.rows: dict[str, ParamRow] = {}
 
+        # The divider sits *above* its row (none above the first), so a row and
+        # its divider can be hidden together.
+        self._dividers: dict[str, QWidget] = {}
         card = Card("Parametreler")
         for index, info in enumerate(infos):
             if index:
-                card.add_divider()
+                self._dividers[info.name] = card.add(h_divider())
             row = ParamRow(info)
             row.edited.connect(self._refresh_actions)
             self.rows[info.name] = row
@@ -278,6 +281,27 @@ class ParamGroupPage(SetupPage):
         if row is not None:
             row.set_vehicle_value(value)
             self._refresh_actions()
+
+    def apply_vehicle_param_set(self, names: set[str]) -> None:
+        """Hide rows for parameters this vehicle's firmware does not have.
+
+        ArduPilot renames parameters between releases (GPS_TYPE became
+        GPS1_TYPE, RNGFND1_MIN_CM became RNGFND1_MIN, ...), so param_meta
+        defines both names. Once the full table has arrived we know which one
+        this firmware actually uses; the other row would otherwise sit there
+        showing "—" forever and could never be written.
+        """
+        if not names:
+            return  # download failed or empty — don't blank the page
+        first_visible = True
+        for name, row in self.rows.items():
+            present = name in names
+            row.setVisible(present)
+            divider = self._dividers.get(name)
+            if divider is not None:
+                divider.setVisible(present and not first_visible)
+            if present:
+                first_visible = False
 
     def _dirty_rows(self) -> list[ParamRow]:
         return [row for row in self.rows.values() if row.is_dirty()]
@@ -1409,6 +1433,12 @@ class SetupWindow(QWidget):
             for page in self._pages:
                 if page is not self.all_params_page:
                     page.on_parameter(name, value)
+        # Now that the full table is known, drop rows for parameter names this
+        # firmware doesn't use (the old or new spelling of a renamed param).
+        names = set(values)
+        for page in self._pages:
+            if isinstance(page, ParamGroupPage):
+                page.apply_vehicle_param_set(names)
         self.param_pill.set_state(f"{len(values)} PARAMETRE", "success")
 
     def _on_download_state(self, state: str, received: int, expected: int) -> None:

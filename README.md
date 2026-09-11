@@ -183,6 +183,24 @@ Notes on behaviour that is easy to get wrong:
   well-formed `DO_MOTOR_TEST` still comes back `FAILED` with `Arm: Radio
   failsafe on`; a transmitter must be powered and bound for the test to
   actually spin anything.
+- **Dropdown values are checked against ArduPilot's own parameter metadata**
+  (`autotest.ardupilot.org/Parameters/Rover/apm.pdef.json`, the file Mission
+  Planner and QGroundControl load). The first version of the dictionary was
+  written from memory and had wrong labels in safety-relevant places — the yaw
+  source (`EK3_SRC1_YAW` 6 was labelled GSF, it is ExternalNav), the sonar type
+  (`RNGFND1_TYPE`, with Blue Robotics Ping missing entirely) and the EKF
+  failsafe (`FS_EKF_ACTION` 2 was labelled "switch to manual", it is "report
+  only").
+- **Renamed parameters are defined under both names.** ArduPilot renamed
+  several between releases — `GPS_TYPE`→`GPS1_TYPE` (4.6), `SYSID_THISMAV`→
+  `MAV_SYSID`, `RNGFND1_MIN_CM`→`RNGFND1_MIN` (now in metres), `ARMING_CHECK`→
+  `ARMING_SKIPCHK` (inverted: it lists checks to *skip*), among others. Once the
+  full table has downloaded, rows for the spelling this firmware does not use
+  are hidden.
+- **A parameter download that gets no reply is retried, then reported as
+  failed.** `PARAM_REQUEST_LIST` is re-sent up to four times, and a download
+  that produced nothing shows as failed instead of as a finished download of
+  zero parameters.
 
 ## Project Structure
 

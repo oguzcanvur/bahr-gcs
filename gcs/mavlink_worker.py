@@ -177,6 +177,12 @@ class _Worker:
         component 0 instead of the autopilot's component 1.
         """
         if self._is_autopilot_heartbeat(heartbeat):
+            # pymavlink locks target_system onto the first vehicle heartbeat but
+            # never sets target_component — it stays 0 (broadcast). Measured:
+            # a heartbeat from (1,1) leaves pymavlink targeting (1,0). So set
+            # both explicitly here too, not only in the search below.
+            master.target_system = heartbeat.get_srcSystem()
+            master.target_component = heartbeat.get_srcComponent()
             return heartbeat
 
         deadline = time.monotonic() + 3.0
@@ -763,6 +769,8 @@ class _Worker:
         idle_timeout = 2.0
         deadline = time.monotonic() + 120.0
         rounds = 0
+        list_attempts = 1          # download_parameters() already sent the first
+        max_list_attempts = 4
 
         while time.monotonic() < deadline:
             time.sleep(0.4)
@@ -782,8 +790,26 @@ class _Worker:
                 continue  # still streaming, let it run
 
             if not expected:
-                self._emit_status("Parameter download: no reply from vehicle.")
-                break
+                # Not a single PARAM_VALUE yet. The request itself may never
+                # have reached the vehicle (a lossy radio link, or a peer that
+                # was not reading yet), so ask again instead of giving up on
+                # the first silence.
+                if list_attempts >= max_list_attempts or self._master is None:
+                    break
+                list_attempts += 1
+                self._emit_status(
+                    f"Parameter download: no reply yet, re-sending request "
+                    f"({list_attempts}/{max_list_attempts})."
+                )
+                try:
+                    self._master.mav.param_request_list_send(
+                        self._master.target_system, self._master.target_component
+                    )
+                except Exception:
+                    break
+                with self._param_lock:
+                    self._param_last_rx = time.monotonic()
+                continue
 
             missing = [i for i in range(expected) if i not in seen]
             if not missing:
@@ -816,6 +842,16 @@ class _Worker:
             self._param_download_active = False
             values = dict(self._param_values)
             expected = self._param_expected
+        if not values:
+            # Reporting this as "complete" put a green "0 PARAMETRE" badge on
+            # the setup window and cleared the parameter table — which reads as
+            # "the vehicle has no parameters", not "we never heard back".
+            self._emit_status(
+                f"Parameter download failed: no reply from vehicle after "
+                f"{list_attempts} request(s)."
+            )
+            self._event_queue.put(("param_download", ("failed", 0, 0)))
+            return
         self._emit_status(f"Parameter download complete: {len(values)}/{expected or len(values)}.")
         self._event_queue.put(("param_download", ("complete", len(values), expected)))
         self._event_queue.put(("parameters", values))

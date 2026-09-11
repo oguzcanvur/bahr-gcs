@@ -754,9 +754,17 @@ class FakeRover:
             dt = min(0.25, now - last)
             last = now
 
-            while True:
+            # Drain everything queued this tick. Windows reports one
+            # WSAECONNRESET per packet sent while nothing was listening on the
+            # GCS port (ICMP port unreachable). Breaking out on each of those
+            # consumed one stale error per 50 ms tick, so a GCS request sat
+            # behind the whole backlog — measured ~1 s after a 1 s head start,
+            # and it grows with how long the sim ran before the GCS bound.
+            for _ in range(500):
                 try:
                     msg = self.link.recv_match(blocking=False)
+                except ConnectionResetError:
+                    continue  # stale "port unreachable" — keep draining
                 except OSError:
                     # No peer yet, or the GCS went away — keep simulating.
                     break

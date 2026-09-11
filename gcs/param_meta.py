@@ -9,6 +9,19 @@ Kurulum ekrani iki modda calisir:
 
 Yani bu dosya bir *beyaz liste* degil, bir *sozluk*. Eksik olmasi bir
 parametreyi erisilmez yapmaz.
+
+Deger tablolari (``choices``) ArduPilot'un resmi Rover parametre metadata'si
+(https://autotest.ardupilot.org/Parameters/Rover/apm.pdef.json — Mission
+Planner ve QGroundControl'un kullandigi dosya) ile birebir karsilastirilarak
+dogrulanmistir. Ezberden yazilan ilk surumde yon kaynagi, sonar tipi ve EKF
+failsafe gibi guvenlik acisindan kritik listelerde yanlis etiketler vardi;
+yeni bir secenek eklerken ayni kaynaga bakin.
+
+ArduPilot bazi parametreleri surumler arasinda yeniden adlandirdi (ornegin
+GPS_TYPE -> GPS1_TYPE, RNGFND1_MIN_CM -> RNGFND1_MIN). Aracta hangi surumun
+calistigi onceden bilinmedigi icin eski ve yeni ad birlikte tanimlidir;
+kurulum ekrani tam parametre listesi indikten sonra aracta olmayan satirlari
+gizler.
 """
 from __future__ import annotations
 
@@ -35,6 +48,30 @@ def _p(name, label, description, **kwargs) -> ParamInfo:
     return ParamInfo(name=name, label=label, description=description, **kwargs)
 
 
+# Birden fazla parametrenin paylastigi deger tablolari (metadata'dan dogrulandi)
+
+_MODE_CHOICES = {0: "0 — MANUAL", 1: "1 — ACRO", 3: "3 — STEERING",
+                 4: "4 — HOLD", 5: "5 — LOITER", 10: "10 — AUTO",
+                 11: "11 — RTL", 15: "15 — GUIDED"}
+
+_GPS_TYPE_CHOICES = {
+    0: "0 — Yok", 1: "1 — Otomatik", 2: "2 — uBlox", 5: "5 — NMEA",
+    9: "9 — DroneCAN", 10: "10 — Septentrio (SBF)", 11: "11 — Trimble (GSOF)",
+    17: "17 — uBlox hareketli baz (Base)", 18: "18 — uBlox hareketli baz (Rover)",
+    21: "21 — ExternalAHRS",
+    22: "22 — DroneCAN hareketli baz (Base)", 23: "23 — DroneCAN hareketli baz (Rover)",
+    24: "24 — Unicore NMEA", 25: "25 — Unicore çift anten (NMEA)",
+    26: "26 — Septentrio çift anten (SBF)",
+}
+
+_BATT_FS_CHOICES = {0: "0 — Sadece uyar", 1: "1 — Eve dön (RTL)",
+                    2: "2 — Dur (HOLD)", 3: "3 — SmartRTL",
+                    4: "4 — SmartRTL veya Hold", 5: "5 — Sonlandır"}
+
+_ROTATION_CHOICES = {0: "0 — None", 2: "2 — Yaw 90°", 4: "4 — Yaw 180°",
+                     6: "6 — Yaw 270°", 8: "8 — Roll 180°"}
+
+
 # --------------------------------------------------------------------------
 # Gruplar. Sira, kurulum ekranindaki sira.
 # --------------------------------------------------------------------------
@@ -56,18 +93,32 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
                "Motor yerleşimini tanımlar. İki motorlu bir katamaranda motorlar "
                "sağ/sol olarak ayrı sürüldüğü (skid steering) için genelde 0 kalır; "
                "asıl yerleşim SERVO çıkış fonksiyonlarıyla belirlenir.",
-               choices={0: "0 — Tanımsız / skid", 1: "1 — Omni3", 2: "2 — Omni X",
+               choices={0: "0 — Varsayılan / skid", 1: "1 — Omni3", 2: "2 — Omni X",
                         3: "3 — Omni Plus"}),
             _p("SYSID_THISMAV", "MAVLink sistem no",
                "Aracın MAVLink ağındaki kimlik numarası. Aynı anda birden fazla araç "
                "uçuruyorsan her birine farklı bir numara verilmeli, yoksa yer "
-               "istasyonu telemetrileri karıştırır. Tek araçta 1 kalır.",
+               "istasyonu telemetrileri karıştırır. Tek araçta 1 kalır. (Eski "
+               "ArduPilot sürümlerindeki adı; güncel sürümde MAV_SYSID.)",
+               minimum=1, maximum=255, step=1, decimals=0, reboot_required=True),
+            _p("MAV_SYSID", "MAVLink sistem no",
+               "Aracın MAVLink ağındaki kimlik numarası. Aynı anda birden fazla araç "
+               "uçuruyorsan her birine farklı bir numara verilmeli, yoksa yer "
+               "istasyonu telemetrileri karıştırır. Tek araçta 1 kalır. (Güncel "
+               "ArduPilot'taki adı; eski sürümlerde SYSID_THISMAV.)",
                minimum=1, maximum=255, step=1, decimals=0, reboot_required=True),
             _p("BRD_SAFETYENABLE", "Emniyet düğmesi",
                "Kartın üzerindeki kırmızı emniyet düğmesinin zorunlu olup olmadığı. "
                "1 iken düğmeye basılmadan motorlara sinyal gitmez — sahada güvenlik "
-               "için açık bırakılması önerilir.",
+               "için açık bırakılması önerilir. (Eski ArduPilot sürümlerindeki "
+               "ayar; güncel sürümde BRD_SAFETY_DEFLT.)",
                choices={0: "0 — Devre dışı", 1: "1 — Zorunlu"}),
+            _p("BRD_SAFETY_DEFLT", "Emniyet düğmesi (açılış)",
+               "Kart açıldığında emniyet düğmesinin hangi durumda başlayacağı. 1 iken "
+               "güvenli (yanıp sönen) durumda başlar ve düğmeye basılana kadar motor "
+               "çıkışlarına sinyal gitmez; 0 iken doğrudan güvensiz (sabit) durumda "
+               "başlar. Sahada 1 bırakılması önerilir.",
+               choices={0: "0 — Kapalı (güvensiz başlar)", 1: "1 — Açık (güvenli başlar)"}),
             _p("LOG_BITMASK", "Kayıt içeriği",
                "Uçuş kaydına (dataflash log) hangi veri gruplarının yazılacağını "
                "seçen bit maskesi. Varsayılan geniş değer, sonradan sorun ararken "
@@ -187,25 +238,15 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
                         7: "7 — SIMPLE", 10: "10 — AUTO", 11: "11 — RTL",
                         12: "12 — SMART_RTL", 15: "15 — GUIDED"}),
             _p("MODE2", "Mod 2", "Mod anahtarının 2. konumundaki mod.",
-               choices={0: "0 — MANUAL", 1: "1 — ACRO", 3: "3 — STEERING",
-                        4: "4 — HOLD", 5: "5 — LOITER", 10: "10 — AUTO",
-                        11: "11 — RTL", 15: "15 — GUIDED"}),
+               choices=dict(_MODE_CHOICES)),
             _p("MODE3", "Mod 3", "Mod anahtarının 3. konumundaki mod.",
-               choices={0: "0 — MANUAL", 1: "1 — ACRO", 3: "3 — STEERING",
-                        4: "4 — HOLD", 5: "5 — LOITER", 10: "10 — AUTO",
-                        11: "11 — RTL", 15: "15 — GUIDED"}),
+               choices=dict(_MODE_CHOICES)),
             _p("MODE4", "Mod 4", "Mod anahtarının 4. konumundaki mod.",
-               choices={0: "0 — MANUAL", 1: "1 — ACRO", 3: "3 — STEERING",
-                        4: "4 — HOLD", 5: "5 — LOITER", 10: "10 — AUTO",
-                        11: "11 — RTL", 15: "15 — GUIDED"}),
+               choices=dict(_MODE_CHOICES)),
             _p("MODE5", "Mod 5", "Mod anahtarının 5. konumundaki mod.",
-               choices={0: "0 — MANUAL", 1: "1 — ACRO", 3: "3 — STEERING",
-                        4: "4 — HOLD", 5: "5 — LOITER", 10: "10 — AUTO",
-                        11: "11 — RTL", 15: "15 — GUIDED"}),
+               choices=dict(_MODE_CHOICES)),
             _p("MODE6", "Mod 6", "Mod anahtarının 6. konumundaki mod.",
-               choices={0: "0 — MANUAL", 1: "1 — ACRO", 3: "3 — STEERING",
-                        4: "4 — HOLD", 5: "5 — LOITER", 10: "10 — AUTO",
-                        11: "11 — RTL", 15: "15 — GUIDED"}),
+               choices=dict(_MODE_CHOICES)),
             _p("INITIAL_MODE", "Açılış modu",
                "Otopilot açıldığında hangi modda başlayacağı. Güvenli olan MANUAL "
                "veya HOLD'dur; AUTO ile başlamak, açılışta görev varsa tekneyi "
@@ -240,7 +281,9 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
             _p("WP_OVERSHOOT", "İzin verilen sapma",
                "Teknenin hattan ne kadar sapmasına izin verildiği. Tarama işinde "
                "küçük tutmak hat düzgünlüğünü artırır ama tekneyi daha agresif "
-               "düzeltmeye zorlar.", unit="m", minimum=0, maximum=10),
+               "düzeltmeye zorlar. (Güncel ArduPilot sürümlerinde bu parametre "
+               "kaldırılmıştır; araçta yoksa bu satır gizlenir.)",
+               unit="m", minimum=0, maximum=10),
             _p("WP_PIVOT_ANGLE", "Yerinde dönüş açısı",
                "Sıradaki waypoint bu açıdan daha keskinse tekne ilerlemeyi kesip "
                "yerinde döner. Tarama hatlarının ucundaki 180° dönüşler için "
@@ -256,8 +299,14 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
                unit="m", minimum=0.1, maximum=20),
             _p("TURN_MAX_G", "Maksimum yanal G",
                "Dönüşte izin verilen yanal ivme. Yüksek değer daha keskin ve hızlı "
-               "dönüş, ama teknede yalpalama ve alabora riski demektir.",
+               "dönüş, ama teknede yalpalama ve alabora riski demektir. (Eski "
+               "ArduPilot sürümlerindeki adı; güncel sürümde ATC_TURN_MAX_G.)",
                unit="G", minimum=0.05, maximum=2),
+            _p("ATC_TURN_MAX_G", "Maksimum yanal G",
+               "Dönüşte izin verilen yanal ivme. Seyir kodu yanal ivmeyi bu değerin "
+               "altında tutar; yüksek değer daha keskin ve hızlı dönüş, ama teknede "
+               "yalpalama ve alabora riski demektir.",
+               unit="G", minimum=0.1, maximum=10),
             _p("CRUISE_SPEED", "Seyir hızı (varsayılan)",
                "Aracın normal seyir hızı. CRUISE_THROTTLE ile birlikte otopilotun "
                "gaz–hız ilişkisini öğrenmesini sağlar.",
@@ -352,14 +401,10 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
                unit="V", minimum=0, maximum=60, step=0.1),
             _p("BATT_FS_LOW_ACT", "Düşük batarya davranışı",
                "Düşük voltaj eşiği aşıldığında ne yapılacağı.",
-               choices={0: "0 — Sadece uyar", 1: "1 — Eve dön (RTL)",
-                        2: "2 — Dur (HOLD)", 3: "3 — SmartRTL",
-                        4: "4 — SmartRTL veya Hold", 5: "5 — Sonlandır"}),
+               choices=dict(_BATT_FS_CHOICES)),
             _p("BATT_FS_CRT_ACT", "Kritik batarya davranışı",
                "Kritik eşik aşıldığında ne yapılacağı.",
-               choices={0: "0 — Sadece uyar", 1: "1 — Eve dön (RTL)",
-                        2: "2 — Dur (HOLD)", 3: "3 — SmartRTL",
-                        4: "4 — SmartRTL veya Hold", 5: "5 — Sonlandır"}),
+               choices=dict(_BATT_FS_CHOICES)),
         ],
     ),
     (
@@ -372,7 +417,7 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
                "ve sürüklenmesini beklersiniz. 1 (RTL) tekneyi kalkış noktasına "
                "geri getirir ama yolda engel varsa tehlikeli olabilir.",
                choices={0: "0 — Hiçbir şey", 1: "1 — Eve dön (RTL)",
-                        2: "2 — Dur (HOLD)", 3: "3 — SmartRTL",
+                        2: "2 — Dur (HOLD)", 3: "3 — SmartRTL, olmazsa RTL",
                         4: "4 — SmartRTL veya Hold", 5: "5 — Sonlandır"}),
             _p("FS_TIMEOUT", "Failsafe gecikmesi",
                "Sinyal kaybının failsafe sayılması için kaç saniye sürmesi "
@@ -391,13 +436,15 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
                "telemetri menzilin ucunda kesilebilir ve tekne görevi bırakır.",
                choices={0: "0 — Kapalı", 1: "1 — Açık"}),
             _p("FS_CRASH_CHECK", "Çarpışma algılama",
-               "Araç sıkıştığında veya devrildiğinde otomatik disarm.",
-               choices={0: "0 — Kapalı", 1: "1 — Sadece uyar", 2: "2 — Disarm"}),
+               "Çarpışma veya sıkışma algılandığında ne yapılacağı. Açıkken tekne "
+               "Hold moduna geçer; 2 seçilirse ayrıca disarm edilir.",
+               choices={0: "0 — Kapalı", 1: "1 — Dur (HOLD)", 2: "2 — Dur ve disarm"}),
             _p("FS_EKF_ACTION", "Konum kaybı davranışı",
                "EKF (konum kestirimi) güvenilmez hale gelirse ne yapılacağı — yani "
-               "araç kendi yerinden emin olamadığında.",
-               choices={0: "0 — Rapor et", 1: "1 — Dur (HOLD)",
-                        2: "2 — Manuel moda geç"}),
+               "araç kendi yerinden emin olamadığında. Tarama teknesi için 1 (Hold) "
+               "önerilir; 2 seçilirse konum kaybında sadece uyarı verilir ve tekne "
+               "hiçbir şey yapmadan devam eder.",
+               choices={0: "0 — Kapalı", 1: "1 — Dur (HOLD)", 2: "2 — Sadece rapor et"}),
         ],
     ),
     (
@@ -406,23 +453,37 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
         [
             _p("RNGFND1_TYPE", "Sensör tipi",
                "Derinlik ölçerin hangi protokolle bağlandığı. Bu tarama teknesinde "
-               "batimetri verisi buradan gelir. 0 seçiliyken hiç veri gelmez. "
-               "NMEA echo sounder'lar için 17, analog çıkışlı sensörler için 1 "
-               "kullanılır.",
-               choices={0: "0 — Yok", 1: "1 — Analog", 2: "2 — MaxbotixI2C",
-                        7: "7 — LightWareI2C", 8: "8 — Bebop",
-                        10: "10 — LightWareSerial", 17: "17 — NMEA",
-                        20: "20 — Benewake TF02", 21: "21 — Benewake TFmini"},
+               "batimetri verisi buradan gelir; 0 seçiliyken hiç veri gelmez. "
+               "ArduPilot teknelerinde en yaygın echo sounder Blue Robotics "
+               "Ping'dir (23); NMEA çıkışlı echo sounder'lar için 17, analog "
+               "çıkışlı sensörler için 1 kullanılır.",
+               choices={0: "0 — Yok", 1: "1 — Analog", 2: "2 — Maxbotix I2C",
+                        7: "7 — LightWare I2C", 8: "8 — LightWare Serial",
+                        10: "10 — MAVLink", 17: "17 — NMEA",
+                        19: "19 — Benewake TF02", 20: "20 — Benewake TFmini (seri)",
+                        23: "23 — Blue Robotics Ping", 24: "24 — DroneCAN"},
                reboot_required=True),
             _p("RNGFND1_MIN_CM", "En küçük ölçüm",
                "Sensörün güvenilir ölçebildiği en kısa mesafe. Bunun altındaki "
                "okumalar geçersiz sayılır — sığ suda derinlik verisi kaybolmasının "
-               "en sık sebebi budur.",
+               "en sık sebebi budur. (Eski ArduPilot sürümlerindeki adı, santimetre; "
+               "güncel sürümde metre cinsinden RNGFND1_MIN.)",
                unit="cm", minimum=0, maximum=1000, step=5, decimals=0),
+            _p("RNGFND1_MIN", "En küçük ölçüm",
+               "Sensörün güvenilir ölçebildiği en kısa mesafe (metre). Bunun "
+               "altındaki okumalar geçersiz sayılır — sığ suda derinlik verisi "
+               "kaybolmasının en sık sebebi budur.",
+               unit="m", minimum=0, maximum=50, step=0.05, decimals=2),
             _p("RNGFND1_MAX_CM", "En büyük ölçüm",
                "Sensörün ölçebildiği en uzun mesafe. Derin suda bunun üstündeki "
-               "dip okunamaz; sensörün gerçek menziline göre ayarlanmalı.",
+               "dip okunamaz; sensörün gerçek menziline göre ayarlanmalı. (Eski "
+               "ArduPilot sürümlerindeki adı, santimetre; güncel sürümde metre "
+               "cinsinden RNGFND1_MAX.)",
                unit="cm", minimum=0, maximum=100000, step=50, decimals=0),
+            _p("RNGFND1_MAX", "En büyük ölçüm",
+               "Sensörün ölçebildiği en uzun mesafe (metre). Derin suda bunun "
+               "üstündeki dip okunamaz; sensörün gerçek menziline göre ayarlanmalı.",
+               unit="m", minimum=0, maximum=1000, step=0.5, decimals=1),
             _p("RNGFND1_ORIENT", "Sensör yönü",
                "Sensörün baktığı yön. Derinlik ölçümü için aşağı, yani 25 "
                "(Pitch 270) olmalıdır.",
@@ -447,11 +508,19 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
         "GPS ve konum kestirimi",
         [
             _p("GPS_TYPE", "GPS tipi",
-               "Birincil GPS alıcısının protokolü. 1 (Auto) çoğu alıcıyı kendi "
-               "tanır.",
-               choices={0: "0 — Yok", 1: "1 — Otomatik", 2: "2 — uBlox",
-                        5: "5 — NMEA", 9: "9 — DroneCAN", 11: "11 — ExternalAHRS"},
-               reboot_required=True),
+               "Birincil GPS alıcısının protokolü — eski ArduPilot sürümlerindeki "
+               "adı (4.6 ve sonrası GPS1_TYPE). Çift antenli Unicore alıcılar için "
+               "25, Septentrio çift anten için 26; iki ayrı u-blox alıcıyla "
+               "hareketli baz kuruluyorsa birinci alıcı 17, ikinci 18.",
+               choices=dict(_GPS_TYPE_CHOICES), reboot_required=True),
+            _p("GPS1_TYPE", "GPS tipi",
+               "Birincil GPS alıcısının protokolü. 1 (Otomatik) çoğu tek antenli "
+               "alıcıyı kendi tanır. Çift antenli GNSS ile yön (heading) almak için "
+               "doğru tipi seçmek gerekir: tek çipte çift antenli Unicore alıcılar "
+               "(ör. UM982) için 25, Septentrio çift anten için 26; iki ayrı u-blox "
+               "alıcıyla hareketli baz kuruluyorsa birinci alıcı 17, ikinci 18. "
+               "Ardından Yön kaynağını (EK3_SRC1_YAW) GPS'e almayı unutmayın.",
+               choices=dict(_GPS_TYPE_CHOICES), reboot_required=True),
             _p("AHRS_EKF_TYPE", "EKF sürümü",
                "Hangi konum kestirim motorunun kullanılacağı. Güncel araçlarda 3 "
                "(EKF3) kullanılır.",
@@ -460,14 +529,17 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
                "Otopilot kartının tekne üzerindeki montaj yönü. Kart ileri bakacak "
                "şekilde düz monte edilmişse 0. Yanlışsa tekne yön duygusunu "
                "tamamen kaybeder.",
-               choices={0: "0 — None", 2: "2 — Yaw 90°", 4: "4 — Yaw 180°",
-                        6: "6 — Yaw 270°", 8: "8 — Roll 180°"}),
+               choices=dict(_ROTATION_CHOICES)),
             _p("EK3_SRC1_YAW", "Yön kaynağı",
-               "Aracın baktığı yönü neyin belirlediği. 1 = pusula. Manyetik "
-               "gürültünün yoğun olduğu metal teknelerde GPS tabanlı kaynaklara "
-               "geçilebilir.",
-               choices={0: "0 — Yok", 1: "1 — Pusula", 2: "2 — Harici",
-                        3: "3 — GPS", 6: "6 — GSF (pusulasız)"}),
+               "Aracın baktığı yönü (heading) neyin belirlediği. 1 = pusula. Motor "
+               "ve ESC akımları pusulayı bozduğu için bu teknede çift antenli GNSS "
+               "varsa 2 (GPS) veya 3 (GPS, olmazsa pusula) önerilir. 2 ve 3 yalnızca "
+               "yön bilgisi veren çift antenli / hareketli baz GNSS ile çalışır — "
+               "tek antenli bir GPS'le 2 seçilirse araç yön kaynağı bulamaz. "
+               "8 (GSF) pusula kullanmadan hareketten yön tahmin eder.",
+               choices={0: "0 — Yok", 1: "1 — Pusula", 2: "2 — GPS (çift anten)",
+                        3: "3 — GPS, olmazsa pusula", 6: "6 — Harici navigasyon",
+                        8: "8 — GSF (pusulasız tahmin)"}),
             _p("COMPASS_ENABLE", "Pusula kullan",
                "Pusulanın kullanılıp kullanılmayacağı. Kapatmak, güçlü manyetik "
                "girişim olan araçlarda bazen daha stabil sonuç verir ama o zaman "
@@ -480,8 +552,7 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
             _p("COMPASS_ORIENT", "Pusula yönü",
                "Harici pusulanın montaj yönü. Yanlışsa tekne dönerken yön değeri "
                "ters veya kaymış görünür.",
-               choices={0: "0 — None", 2: "2 — Yaw 90°", 4: "4 — Yaw 180°",
-                        6: "6 — Yaw 270°", 8: "8 — Roll 180°"}),
+               choices=dict(_ROTATION_CHOICES)),
         ],
     ),
     (
@@ -492,12 +563,21 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
                "Arm etmeden önce hangi kontrollerin yapılacağı (bit maskesi). "
                "1 = hepsi, 0 = hiçbiri. Kapatmak sahada arm sorununu geçici çözer "
                "ama gerçek bir arızayı gizler — tez sunumunda bile açık bırakmak "
-               "daha doğrudur.",
+               "daha doğrudur. (Eski ArduPilot sürümlerindeki ayar; güncel sürümde "
+               "mantığı ters çevrilmiş ARMING_SKIPCHK.)",
+               minimum=0, step=1, decimals=0),
+            _p("ARMING_SKIPCHK", "Atlanacak arm kontrolleri",
+               "Arm etmeden önce hangi kontrollerin ATLANACAĞI (bit maskesi) — eski "
+               "ARMING_CHECK'in tersidir. 0 = hiçbir kontrol atlanmaz (önerilen). "
+               "Kontrol atlamak sahada arm sorununu geçici çözer ama gerçek bir "
+               "arızayı gizler.",
                minimum=0, step=1, decimals=0),
             _p("ARMING_REQUIRE", "Arm zorunlu",
-               "Motorların dönmesi için arm gerekip gerekmediği.",
-               choices={0: "0 — Gerekmiyor", 1: "1 — Gerekli",
-                        2: "2 — Gerekli, çıkışlar 0"}),
+               "Motorların dönmesi için arm gerekip gerekmediği. 1 önerilir. 3 "
+               "seçilirse araç, arm kontrolleri geçer geçmez kendiliğinden bir kez "
+               "arm olur — teknede tehlikeli olabilir.",
+               choices={0: "0 — Gerekmiyor", 1: "1 — Gerekli (disarm'da min PWM)",
+                        3: "3 — Otomatik arm (kontroller geçince bir kez)"}),
             _p("ARMING_RUDDER", "Çubukla arm",
                "Kumanda çubuklarıyla arm/disarm yapılabilsin mi.",
                choices={0: "0 — Kapalı", 1: "1 — Sadece arm",
@@ -543,6 +623,7 @@ _PREFIX_HINTS: list[tuple[str, str]] = [
     ("MODE", "Uçuş modu seçimi."),
     ("AHRS_", "Yönelim kestirimi ayarı."),
     ("NAVL1_", "L1 seyir kontrolcüsü ayarı — hatta oturma agresifliğini belirler."),
+    ("MAV_", "MAVLink haberleşme ayarı."),
 ]
 
 

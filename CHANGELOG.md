@@ -10,6 +10,29 @@ Biçim [Keep a Changelog](https://keepachangelog.com/) temel alınarak tutulur.
 
 ## [Unreleased]
 
+### Düzeltilen
+- Kurulum penceresindeki parametre açılır listeleri ArduPilot'un resmi
+  parametre metadata'sıyla (`apm.pdef.json`) karşılaştırıldı; güvenlik
+  açısından kritik yanlış etiketler düzeltildi — yön kaynağı
+  (`EK3_SRC1_YAW`), sonar tipi (`RNGFND1_TYPE`), konum kaybı failsafe'i
+  (`FS_EKF_ACTION`), çarpışma algılama (`FS_CRASH_CHECK`), arm zorunluluğu
+  (`ARMING_REQUIRE`) ve GPS tipi. Çift antenli GNSS ve Blue Robotics Ping
+  seçenekleri eklendi.
+- Cevap alınamayan parametre indirmesi "0 parametre, tamamlandı" olarak
+  görünüyordu; artık istek 4 kez tekrar gönderiliyor ve sonuç alınamazsa
+  başarısız olarak raporlanıyor.
+- Otopilotun heartbeat'i ilk geldiğinde komutlar bileşen 0'a (yayın)
+  gönderiliyordu; artık her durumda otopilotun kendi bileşenine gidiyor.
+- Simülatör, bağlantıdan hemen sonra gelen istekleri ~1 sn geç
+  cevaplıyordu (Windows'ta biriken "port ulaşılamaz" hataları); artık aynı
+  döngüde boşaltılıyor.
+
+### Değişen
+- Yeni ArduPilot sürümlerinde adı değişen parametreler (`GPS_TYPE` →
+  `GPS1_TYPE`, `SYSID_THISMAV` → `MAV_SYSID`, `RNGFND1_MIN_CM` →
+  `RNGFND1_MIN` vb.) iki adla da tanımlı; araçta olmayan ad, tam parametre
+  listesi indikten sonra kurulum ekranında gizleniyor.
+
 ## [0.0.0] — 2026-08-18
 
 Genesis etiketi — versiyonlama başlamadan önce projede birikmiş olan her şeyin
