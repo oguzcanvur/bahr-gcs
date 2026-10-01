@@ -10,7 +10,32 @@ Biçim [Keep a Changelog](https://keepachangelog.com/) temel alınarak tutulur.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-10-01
+
+### Eklenen
+- **RTK/NTRIP istemcisi doğrudan BAHR-GCS içinde** (Ayarlar sekmesinde
+  kapanabilir "RTK / NTRIP" kartı): herhangi bir NTRIP sunucusuna
+  (TUSAGA-Aktif dahil) bağlanma, GGA konum cümlesi gönderme, gelen RTCM3
+  düzeltmelerini MAVLink `GPS_RTCM_DATA` olarak araca iletme
+  (`gcs/ntrip_client.py`, `gcs/rtcm.py`). Önceki ayrı `tools/rtcm_relay.py`
+  betiğinin yerini alıyor — artık GCS'nin kendisinden, ayrı bir süreç
+  başlatmaya gerek kalmadan.
+- Kapanabilir kart bileşeni (`gcs/components.py`'nin `Card`'ına
+  `collapsible`/`start_collapsed`) — "RTK / NTRIP" ve "Local demo" blokları
+  artık varsayılan kapalı, ekranı gereksiz kaplamıyor.
+- "TUNING" ve "SETUP" artık Plan sekmesinden sol bara taşındı, ayrı
+  pencere olarak açılıyor ve bağlantı yokken de açılabiliyor (önceden
+  Plan'ı meşgul ediyordu ve bağlantı istiyordu).
+- Özel otopilot (bahr_pilot) için yeni parametreler: `RCMAP_ARM`,
+  `RCMAP_OVERRIDE` (kumandada arm/elle-devralma anahtarı kanalları),
+  `BATT_FS_ENABLE` (düşük batarya motorları durdursun mu).
+- GPS uydu sayısı ve su sıcaklığı artık telemetri panelinde gösteriliyor.
+- `docs/architecture-diagram.html` — sistem mimarisi ve bağlantı portları
+  diyagramı. `tools/gnss_probe.py` — RTD100 GNSS seri port tanılama aracı.
+
 ### Düzeltilen
+- GPS uydu sayısı, MAVLink'in "bilinmiyor" değeri olan 255'i gerçek bir
+  sayıymış gibi gösteriyordu; artık `None` olarak ele alınıyor.
 - Kurulum penceresindeki parametre açılır listeleri ArduPilot'un resmi
   parametre metadata'sıyla (`apm.pdef.json`) karşılaştırıldı; güvenlik
   açısından kritik yanlış etiketler düzeltildi — yön kaynağı
@@ -62,5 +87,6 @@ altına eklenip bir sürüm etiketlendiğinde kendi başlığına taşınır.
   Ground Control Station) olarak belirlendi; marka kimliği `gcs/theme.py`
   içinde tek kaynaktan yönetiliyor
 
-[Unreleased]: https://github.com/oguzcanvur/bahr-gcs/compare/v0.0.0...HEAD
+[Unreleased]: https://github.com/oguzcanvur/bahr-gcs/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/oguzcanvur/bahr-gcs/compare/v0.0.0...v0.1.0
 [0.0.0]: https://github.com/oguzcanvur/bahr-gcs/releases/tag/v0.0.0

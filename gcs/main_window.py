@@ -28,7 +28,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QPointF, QRectF, QTimer, QUrl, Qt, qDebug
+from PyQt6.QtCore import QPointF, QRectF, QSettings, QTimer, QUrl, Qt, qDebug
 from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEngineSettings
@@ -91,6 +91,8 @@ from gcs.map_bridge import MapBridge
 from gcs.mavlink_service import MavlinkService
 from gcs.mission_planner import SurveyPlanner
 from gcs.models import DepthSample, MissionPoint, MissionStats, TelemetryData
+from gcs.ntrip_client import NtripClient
+from gcs.rtcm import RtcmFragmenter
 from gcs.theme import (
     APP_NAME,
     APP_TAGLINE_SHORT,
@@ -116,6 +118,66 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     d_lambda = math.radians(lon2 - lon1)
     a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
     return 2 * radius * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+# MAVLink GPS_FIX_TYPE (common.xml) — pymavlink'in kendi sabitleriyle
+# dogrulandi: 0 NO_GPS, 1 NO_FIX, 2 2D_FIX, 3 3D_FIX, 4 DGPS, 5 RTK_FLOAT,
+# 6 RTK_FIXED, 7 STATIC, 8 PPP. Renkler donus aninda COLORS'tan cozulur
+# (asagida) — bu sozluk sadece metin ve ton *adini* tasir.
+_GPS_FIX_LABELS: dict[int, tuple[str, str]] = {
+    0: ("YOK", "danger"),
+    1: ("YOK", "danger"),
+    2: ("2D", "warning"),
+    3: ("3D", "info"),
+    4: ("DGPS", "info"),
+    5: ("FLOAT", "warning"),
+    6: ("FIX", "success"),
+    7: ("STATIC", "success"),
+    8: ("PPP", "success"),
+}
+
+
+def _gps_fix_label(fix_type: int | None) -> tuple[str, str]:
+    """(metin, renk) dondurur — renk dogrudan COLORS'tan, MetricTile.set_value'ya hazir."""
+    text, tone = ("—", "tertiary") if fix_type is None else _GPS_FIX_LABELS.get(fix_type, ("?", "tertiary"))
+    color = {
+        "danger": COLORS.danger,
+        "warning": COLORS.warning,
+        "info": COLORS.info,
+        "success": COLORS.success,
+        "tertiary": COLORS.text_tertiary,
+    }[tone]
+    return text, color
+
+
+def _decimal_to_nmea_field(value: float, is_lat: bool) -> tuple[str, str]:
+    """Ondalık dereceyi NMEA'nın ddmm.mmmm / dddmm.mmmm biçimine çevirir."""
+    hemisphere = ("N" if value >= 0 else "S") if is_lat else ("E" if value >= 0 else "W")
+    value = abs(value)
+    degrees = int(value)
+    minutes = (value - degrees) * 60
+    width = 2 if is_lat else 3
+    return f"{degrees:0{width}d}{minutes:07.4f}", hemisphere
+
+
+def _build_gga_sentence(lat: float, lon: float) -> str:
+    """NTRIP VRS'nin yaklaşık konumu bilmesi için gönderilen GGA cümlesi.
+
+    Kalite alanı 1 (tek nokta) — GGA burada bir konum çözümü iddiası değil,
+    caster'ın en yakın sanal referans istasyonunu seçmesi için bir ipucu.
+    """
+    now = datetime.utcnow()
+    time_field = now.strftime("%H%M%S") + f".{now.microsecond // 10000:02d}"
+    lat_field, lat_hemi = _decimal_to_nmea_field(lat, True)
+    lon_field, lon_hemi = _decimal_to_nmea_field(lon, False)
+    body = (
+        f"GPGGA,{time_field},{lat_field},{lat_hemi},{lon_field},{lon_hemi},"
+        "1,08,1.0,0.0,M,0.0,M,,"
+    )
+    checksum = 0
+    for char in body:
+        checksum ^= ord(char)
+    return f"${body}*{checksum:02X}"
 
 
 # ---------------------------------------------------------------------------
@@ -1119,6 +1181,11 @@ class MainWindow(QMainWindow):
         self.camera_panel = CameraPanel()
         self.planner = SurveyPlanner()
         self.mavlink = MavlinkService()
+        self._ntrip_client: NtripClient | None = None
+        self._rtcm_fragmenter = RtcmFragmenter()
+        # app.py zaten setOrganizationName/setApplicationName cagirdi —
+        # ayni ayar deposunu "ntrip/" onekiyle kullaniyoruz.
+        self._settings = QSettings()
 
         self.polygon_points: list[dict] = []
         self.mission_points: list[MissionPoint] = []
@@ -1299,8 +1366,15 @@ class MainWindow(QMainWindow):
         self.tile_speed = MetricTile("Speed", "—", "m/s", bare=True)
         self.tile_heading = MetricTile("Heading", "—", "deg", bare=True)
         self.tile_depth = MetricTile("Depth", "—", "m", bare=True)
+        self.tile_water_temp = MetricTile("Water temp", "—", "°C", bare=True)
         self.tile_battery = MetricTile("Battery", "—", "%", bare=True)
-        for tile in (self.tile_speed, self.tile_heading, self.tile_depth, self.tile_battery):
+        self.tile_satellites = MetricTile("Uydu", "—", "", bare=True)
+        self.tile_gps_fix = MetricTile("GPS", "—", "", bare=True)
+        for tile in (
+            self.tile_speed, self.tile_heading, self.tile_depth,
+            self.tile_water_temp, self.tile_battery,
+            self.tile_satellites, self.tile_gps_fix,
+        ):
             metrics_layout.addWidget(tile)
         layout.addWidget(metrics)
 
@@ -1361,6 +1435,31 @@ class MainWindow(QMainWindow):
         self.console_button.setFixedHeight(46)
         self.console_button.toggled.connect(self._toggle_console)
         layout.addWidget(self.console_button)
+
+        # Vehicle-settings popups, not a page of their own — same "always
+        # in the rail, never occupy the Plan tab" spot as LOG, just firing
+        # an existing separate window instead of toggling a drawer.
+        self.tuning_button = QPushButton("TUNING")
+        self.tuning_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.tuning_button.setProperty("rail", "true")
+        self.tuning_button.setFixedHeight(46)
+        self.tuning_button.setToolTip(
+            "Read and write the vehicle parameters that shape turns and tracking"
+        )
+        self.tuning_button.clicked.connect(self._show_tuning)
+        layout.addWidget(self.tuning_button)
+
+        self.setup_button = QPushButton("SETUP")
+        self.setup_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setup_button.setProperty("rail", "true")
+        self.setup_button.setFixedHeight(46)
+        self.setup_button.setToolTip(
+            "Full setup screen: parameters, radio / accelerometer / compass "
+            "calibration, motor test, failsafe and sonar — no Mission Planner needed"
+        )
+        self.setup_button.clicked.connect(self._show_setup)
+        layout.addWidget(self.setup_button)
+
         return rail
 
     def _build_left_panel(self) -> QWidget:
@@ -1419,7 +1518,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(Space.md)
 
-        demo = Card("Local demo (no Gazebo)")
+        demo = Card("Local demo (no Gazebo)", collapsible=True, start_collapsed=True)
         demo_hint = QLabel(
             "Runs sim/fake_vehicle.py as a real MAVLink peer on this machine — "
             "no Ubuntu box or Gazebo needed. Starting it fills in UDP "
@@ -1549,6 +1648,8 @@ class MainWindow(QMainWindow):
         # Gorunmez durum etiketi — otomatik yeniden baglanma mantigi bunu okuyor.
         self.link_status_label = QLabel("Disconnected", card)
         self.link_status_label.hide()
+
+        layout.addWidget(self._build_ntrip_card())
 
         health = Card("Link health")
         self.row_link_quality = KeyValueRow("Signal quality", "—")
@@ -1789,25 +1890,13 @@ class MainWindow(QMainWindow):
         grid.addWidget(FormRow("Turn radius", self.turn_radius_spin), 2, 1)
         survey.add_layout(grid)
 
+        # Vehicle tuning / setup & calibration moved to the left rail
+        # (TUNING / SETUP buttons) — both just open their own existing
+        # popup window and have nothing to do with the plan being edited
+        # here, so they no longer eat space in this tab.
+
         # Speed can be retargeted mid-survey, so it gets its own command
         # rather than only riding along with a mission upload.
-        self.tuning_button = button("Vehicle tuning", "ghost")
-        self.tuning_button.setProperty("compact", "true")
-        self.tuning_button.setToolTip(
-            "Read and write the vehicle parameters that shape turns and tracking"
-        )
-        self.tuning_button.clicked.connect(self._show_tuning)
-        survey.add(self._gated(self.tuning_button, "link"))
-
-        self.setup_button = button("Vehicle setup & calibration", "ghost")
-        self.setup_button.setProperty("compact", "true")
-        self.setup_button.setToolTip(
-            "Full setup screen: parameters, radio / accelerometer / compass "
-            "calibration, motor test, failsafe and sonar — no Mission Planner needed"
-        )
-        self.setup_button.clicked.connect(self._show_setup)
-        survey.add(self._gated(self.setup_button, "link"))
-
         self.adaptive_speed_toggle = toggle("Slow through turns", True)
         self.adaptive_speed_toggle.setToolTip(
             "Track MISSION_CURRENT and cut speed on the turn-around arcs, "
@@ -2228,6 +2317,155 @@ class MainWindow(QMainWindow):
         self._update_connection_string()
         self.mavlink.connect_vehicle(self.connection_target)
 
+    # -- RTK / NTRIP ---------------------------------------------------------
+    # GNSS'in kendisi internete çıkamıyor (bkz. RTD100) — burada çekilen RTCM
+    # düzeltmesi MAVLink GPS_RTCM_DATA olarak araca (ve oradan GNSS'e) iletilir.
+    # Protokol detayları swegeo_gnss_app'ten (TUSAGA-Aktif'e karşı zaten
+    # doğrulanmış) alındı; kalıcılık için ana pencerenin QSettings deposu
+    # "ntrip/" önekiyle kullanılıyor.
+
+    def _build_ntrip_card(self) -> QWidget:
+        card = Card("RTK / NTRIP", collapsible=True, start_collapsed=True)
+        s = self._settings
+
+        self.ntrip_host_edit = QLineEdit(str(s.value("ntrip/host", "www.tusaga-aktif.gov.tr")))
+        self.ntrip_port_edit = QLineEdit(str(s.value("ntrip/port", "2101")))
+        self.ntrip_mount_edit = QLineEdit(str(s.value("ntrip/mountpoint", "VRSRTCM31")))
+        self.ntrip_user_edit = QLineEdit(str(s.value("ntrip/username", "")))
+        self.ntrip_pass_edit = QLineEdit(str(s.value("ntrip/password", "")))
+        self.ntrip_pass_edit.setEchoMode(QLineEdit.EchoMode.Password)
+
+        for row in (
+            FormRow("Sunucu (host)", self.ntrip_host_edit),
+            FormRow("Port", self.ntrip_port_edit),
+            FormRow("Mount point", self.ntrip_mount_edit),
+            FormRow("Kullanıcı adı", self.ntrip_user_edit),
+            FormRow("Şifre", self.ntrip_pass_edit),
+        ):
+            card.add(row)
+
+        card.add_divider()
+        card.add(field_label(
+            "Yaklaşık konum — VRS caster'ın en yakın sanal istasyonu seçmesi "
+            "için. Araçtan canlı konum gelince otomatik onun yerini alır."
+        ))
+        self.ntrip_lat_spin = QDoubleSpinBox()
+        self.ntrip_lat_spin.setRange(-90.0, 90.0)
+        self.ntrip_lat_spin.setDecimals(6)
+        self.ntrip_lat_spin.setValue(float(s.value("ntrip/lat", 0.0)))
+        self.ntrip_lon_spin = QDoubleSpinBox()
+        self.ntrip_lon_spin.setRange(-180.0, 180.0)
+        self.ntrip_lon_spin.setDecimals(6)
+        self.ntrip_lon_spin.setValue(float(s.value("ntrip/lon", 0.0)))
+        card.add(FormRow("Yaklaşık enlem", self.ntrip_lat_spin))
+        card.add(FormRow("Yaklaşık boylam", self.ntrip_lon_spin))
+
+        card.add_divider()
+        self.ntrip_status_row = KeyValueRow("Durum", "Bağlı değil")
+        self.ntrip_bytes_row = KeyValueRow("Alınan veri", "0 KB")
+        self.ntrip_rtcm_row = KeyValueRow("Araca iletilen RTCM", "0 mesaj")
+        for row in (self.ntrip_status_row, self.ntrip_bytes_row, self.ntrip_rtcm_row):
+            card.add(row)
+
+        actions = QWidget()
+        actions_layout = QHBoxLayout(actions)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(Space.sm)
+        self.ntrip_connect_button = button("Bağlan", "primary", self._connect_ntrip)
+        self.ntrip_disconnect_button = button("Kes", "quiet", self._disconnect_ntrip)
+        self.ntrip_disconnect_button.setEnabled(False)
+        actions_layout.addWidget(self.ntrip_connect_button, 1)
+        actions_layout.addWidget(self.ntrip_disconnect_button, 1)
+        card.add(actions)
+
+        self._ntrip_rtcm_message_count = 0
+        return card
+
+    def _connect_ntrip(self) -> None:
+        if self._ntrip_client is not None:
+            return
+        host = self.ntrip_host_edit.text().strip()
+        mountpoint = self.ntrip_mount_edit.text().strip()
+        try:
+            port = int(self.ntrip_port_edit.text().strip())
+        except ValueError:
+            self.ntrip_status_row.set_value("Geçersiz port", COLORS.danger)
+            return
+        username = self.ntrip_user_edit.text()
+        password = self.ntrip_pass_edit.text()
+
+        s = self._settings
+        s.setValue("ntrip/host", host)
+        s.setValue("ntrip/port", str(port))
+        s.setValue("ntrip/mountpoint", mountpoint)
+        s.setValue("ntrip/username", username)
+        s.setValue("ntrip/password", password)
+        s.setValue("ntrip/lat", self.ntrip_lat_spin.value())
+        s.setValue("ntrip/lon", self.ntrip_lon_spin.value())
+
+        self._rtcm_fragmenter = RtcmFragmenter()
+        self._ntrip_rtcm_message_count = 0
+        client = NtripClient(host, port, mountpoint, username, password)
+        client.status_changed.connect(self._on_ntrip_status)
+        client.rtcm_received.connect(self._on_ntrip_rtcm)
+        client.error.connect(self._on_ntrip_error)
+        self._ntrip_client = client
+        self._ntrip_gga_timer = QTimer(self)
+        self._ntrip_gga_timer.setInterval(1000)
+        self._ntrip_gga_timer.timeout.connect(self._push_ntrip_gga)
+        self._ntrip_gga_timer.start()
+        self._push_ntrip_gga()
+        client.start()
+        self.ntrip_connect_button.setEnabled(False)
+        self.ntrip_disconnect_button.setEnabled(True)
+        self.ntrip_status_row.set_value("Bağlanıyor…", COLORS.warning)
+
+    def _disconnect_ntrip(self) -> None:
+        if self._ntrip_client is not None:
+            self._ntrip_client.stop()
+            self._ntrip_client.wait(2000)
+            self._ntrip_client = None
+        if hasattr(self, "_ntrip_gga_timer"):
+            self._ntrip_gga_timer.stop()
+        self.ntrip_connect_button.setEnabled(True)
+        self.ntrip_disconnect_button.setEnabled(False)
+        self.ntrip_status_row.set_value("Bağlı değil", COLORS.text_tertiary)
+
+    def _push_ntrip_gga(self) -> None:
+        """VRS'ye konum ipucu — araçtan canlı fix varsa onu, yoksa elle
+        girilen yaklaşık konumu kullanır."""
+        if self._ntrip_client is None:
+            return
+        telemetry = self.mavlink.get_telemetry()
+        if telemetry.latitude is not None and telemetry.longitude is not None:
+            lat, lon = telemetry.latitude, telemetry.longitude
+        else:
+            lat, lon = self.ntrip_lat_spin.value(), self.ntrip_lon_spin.value()
+            if lat == 0.0 and lon == 0.0:
+                return  # ne canlı konum ne elle girilmiş bir şey var
+        self._ntrip_client.set_gga(_build_gga_sentence(lat, lon))
+
+    def _on_ntrip_status(self, status: dict) -> None:
+        if status.get("connected"):
+            self.ntrip_status_row.set_value(
+                f"Bağlı — {status.get('mountpoint', '')}", COLORS.success
+            )
+        else:
+            self.ntrip_status_row.set_value("Yeniden bağlanılıyor…", COLORS.warning)
+
+    def _on_ntrip_rtcm(self, data: bytes) -> None:
+        client = self._ntrip_client
+        if client is not None:
+            kb = client.bytes_received / 1024.0
+            self.ntrip_bytes_row.set_value(f"{kb:.1f} KB")
+        for flags, length, chunk in self._rtcm_fragmenter.fragment(data):
+            self.mavlink.send_rtcm(flags, length, chunk)
+        self._ntrip_rtcm_message_count += 1
+        self.ntrip_rtcm_row.set_value(f"{self._ntrip_rtcm_message_count} mesaj")
+
+    def _on_ntrip_error(self, message: str) -> None:
+        self.ntrip_status_row.set_value(f"Hata: {message}", COLORS.danger)
+
     # -- yerel demo simulatoru ---------------------------------------------
 
     def _start_demo(self) -> None:
@@ -2354,6 +2592,7 @@ class MainWindow(QMainWindow):
         # An orphaned demo process is easy to leave behind otherwise — it has
         # no window of its own to remind anyone it is still running.
         self._stop_demo()
+        self._disconnect_ntrip()
         # The setup screen is a separate top-level window, so it would keep the
         # application alive after the main window closes.
         setup = getattr(self, "_setup_window", None)
@@ -2785,9 +3024,15 @@ class MainWindow(QMainWindow):
         self.tile_speed.set_value(speed_text)
         self.tile_heading.set_value(heading_text)
         self.tile_depth.set_value(depth_text, depth_tone)
+        water_temp_text = self._number_text(telemetry.water_temperature_c, "{:.1f}")
+        self.tile_water_temp.set_value(water_temp_text)
         self.tile_battery.set_value(
             f"{battery_pct}" if battery_pct is not None else "—", self._battery_tone(battery_pct)
         )
+        satellites = telemetry.satellites_visible
+        self.tile_satellites.set_value(f"{satellites}" if satellites is not None else "—")
+        fix_text, fix_color = _gps_fix_label(telemetry.fix_type)
+        self.tile_gps_fix.set_value(fix_text, fix_color)
         self.compass.set_heading(telemetry.heading_deg)
         self.mode_pill.set_state(
             telemetry.mode or "UNKNOWN",

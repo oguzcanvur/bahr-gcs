@@ -31,3 +31,9 @@ graphify-out/
 *.log
 *.tmp
 run_error.log
+
+# --- bahr_pilot -------------------------------------------------------------
+# Kendi basina duran bir repo (github.com/oguzcanvur/bahr-pilot), kendi
+# .git'i var. Buraya submodule/gitlink olarak eklenmesin diye disarida
+# birakiliyor.
+bahr_pilot/

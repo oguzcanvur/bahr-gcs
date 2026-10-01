@@ -191,6 +191,17 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
             _p("RCMAP_THROTTLE", "Gaz kanalı",
                "İleri/geri gaz komutunun okunacağı kumanda kanalı. Varsayılan 3.",
                minimum=1, maximum=16, step=1, decimals=0, reboot_required=True),
+            _p("RCMAP_ARM", "Arm anahtarı kanalı",
+               "Motorların donanım seviyesinde açılıp kapandığı fiziksel anahtar "
+               "kanalı. Kapalıyken motorlar Pi/GCS'den tamamen bağımsız olarak "
+               "asla dönmez — ArduPilot'un kendi parametresi değil, bu araç için "
+               "eklendi. Varsayılan 6.",
+               minimum=1, maximum=16, step=1, decimals=0),
+            _p("RCMAP_OVERRIDE", "Elle devralma kanalı",
+               "Açıkken kumanda, Pi'yi tamamen baypas ederek motorları doğrudan "
+               "sürer. ArduPilot'un kendi parametresi değil, bu araç için "
+               "eklendi. Varsayılan 5.",
+               minimum=1, maximum=16, step=1, decimals=0),
             _p("MODE_CH", "Mod anahtarı kanalı",
                "Uçuş modunu değiştiren kumanda anahtarının bağlı olduğu kanal. Bu "
                "kanalın PWM değeri 6 aralığa bölünür ve MODE1…MODE6 parametreleri "
@@ -405,6 +416,14 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
             _p("BATT_FS_CRT_ACT", "Kritik batarya davranışı",
                "Kritik eşik aşıldığında ne yapılacağı.",
                choices=dict(_BATT_FS_CHOICES)),
+            _p("BATT_FS_ENABLE", "Düşük batarya motorları durdursun mu",
+               "Bu araca özgü (Cube/ArduPilot'ta yok): BATT_LOW_VOLT eşiğinin "
+               "altına inince motorları durdursun mu. ArduPilot'un çok seçenekli "
+               "BATT_FS_LOW_ACT'inin aksine tek davranışı var — dur. Motor "
+               "sürücüsü kartındaki voltaj bölücüsü henüz kalibre edilmediği için "
+               "varsayılan kapalıdır; gerçek voltajı multimetreyle doğrulamadan "
+               "açmayın.",
+               choices={0: "0 — Kapalı", 1: "1 — Açık"}),
         ],
     ),
     (

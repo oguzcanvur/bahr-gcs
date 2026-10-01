@@ -19,6 +19,7 @@ class TelemetryData:
     altitude_amsl_m: float | None = None
     altitude_rel_m: float | None = None
     fix_type: int | None = None
+    satellites_visible: int | None = None
     # Straight from the vehicle: MISSION_CURRENT.seq and
     # NAV_CONTROLLER_OUTPUT.wp_dist. Guessing the active waypoint from
     # proximity picks the wrong lane on a lawnmower path.
@@ -32,6 +33,7 @@ class TelemetryData:
     last_depth_time: datetime | None = None
     min_depth_m: float | None = None
     max_depth_m: float | None = None
+    water_temperature_c: float | None = None
     armed: bool = False
     link_quality_pct: int | None = None
     failsafe: str = "UNKNOWN"

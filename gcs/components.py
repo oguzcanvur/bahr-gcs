@@ -98,6 +98,8 @@ class Card(QFrame):
         parent: QWidget | None = None,
         flat: bool = False,
         spacing: int = Space.md,
+        collapsible: bool = False,
+        start_collapsed: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("cardFlat" if flat else "card")
@@ -124,6 +126,32 @@ class Card(QFrame):
         self.body_layout.setContentsMargins(0, 0, 0, 0)
         self.body_layout.setSpacing(spacing)
         self._outer.addWidget(self.body)
+
+        # Kapatilabilir kart: baslik tiklaninca govde gizlenir/gosterilir.
+        # LINK sekmesi gibi az kullanilan blogun surekli acik kalip alan
+        # kaplamasini onlemek icin (bkz. "Local demo", "RTK / NTRIP").
+        self._collapsible = collapsible and bool(title)
+        if self._collapsible:
+            # Etiketler fareyi yutmasin — tiklama, alttaki header'a gecsin.
+            self.title_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            self._collapse_indicator = QLabel("▾")
+            self._collapse_indicator.setObjectName("cardTitle")
+            self._collapse_indicator.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            header_layout.addWidget(self._collapse_indicator)
+            self.header.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.header.mousePressEvent = self._on_header_clicked  # type: ignore[method-assign]
+            if start_collapsed:
+                self.set_collapsed(True)
+
+    def _on_header_clicked(self, event) -> None:
+        del event
+        self.set_collapsed(self.body.isVisible())
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        if not self._collapsible:
+            return
+        self.body.setVisible(not collapsed)
+        self._collapse_indicator.setText("▸" if collapsed else "▾")
 
     def add_header_widget(self, widget: QWidget) -> None:
         self.header.show()

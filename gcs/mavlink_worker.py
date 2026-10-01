@@ -580,6 +580,17 @@ class _Worker:
         except Exception as exc:
             self._emit_status(f"Command failed: {exc}")
 
+    def send_rtcm(self, flags: int, length: int, data: list[int]) -> None:
+        """Forward one RTCM3 fragment (NTRIP -> araç) as GPS_RTCM_DATA.
+
+        Sessizce yok sayar bağlantı yoksa — NTRIP istemcisi GCS bağlı olsun
+        olmasın saniyede onlarca kez çağırabilir, her biri için durum mesajı
+        basmak logu boğar.
+        """
+        if self._master is None:
+            return
+        self._master.mav.gps_rtcm_data_send(flags, length, data)
+
     def go_to(self, latitude: float, longitude: float) -> None:
         """Send the vehicle to a single point, the way QGC and MP do it.
 
@@ -1069,6 +1080,9 @@ class _Worker:
                 self._telemetry.heading_deg = float(message.heading)
             elif message_type == "GPS_RAW_INT":
                 self._telemetry.fix_type = int(message.fix_type)
+                # 255 = "bilinmiyor" (MAVLink common.xml) — gercek bir sayi degil.
+                satellites = int(message.satellites_visible)
+                self._telemetry.satellites_visible = satellites if satellites != 255 else None
             elif message_type == "MISSION_CURRENT":
                 self._telemetry.current_waypoint_seq = int(message.seq)
             elif message_type == "MISSION_ITEM_REACHED":
@@ -1121,6 +1135,11 @@ class _Worker:
                 "sonar_depth",
             }:
                 self._update_depth_sample(float(message.value))
+            elif message_type == "NAMED_VALUE_FLOAT" and str(message.name).strip("\x00").lower() in {
+                "water_temp",
+                "water_temperature",
+            }:
+                self._telemetry.water_temperature_c = float(message.value)
             elif message_type == "STATUSTEXT":
                 self._handle_statustext(message)
             elif message_type == "MAG_CAL_PROGRESS":
@@ -1431,6 +1450,9 @@ class _Worker:
                 self.motor_test(motor, throttle_pct, seconds, label=label)
             elif command == "reboot_autopilot":
                 self.reboot_autopilot()
+            elif command == "send_rtcm":
+                flags, length, data = payload
+                self.send_rtcm(flags, length, data)
 
 
 def run_worker(command_queue, event_queue) -> None:

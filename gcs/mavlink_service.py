@@ -169,6 +169,9 @@ class MavlinkService(QObject):
     def reboot_autopilot(self) -> None:
         self._command_queue.put(("reboot_autopilot", None))
 
+    def send_rtcm(self, flags: int, length: int, data: bytes) -> None:
+        self._command_queue.put(("send_rtcm", (flags, length, list(data))))
+
     def _drain_events(self) -> None:
         while True:
             try:
