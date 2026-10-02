@@ -282,9 +282,18 @@ modu) — mevcut MAVLink/UDP kodu hiç değişmeden çalışsın.
       yavaşlama — `bahr_pilot/navigation.py`, gerçek teknede doğrulanmadı.
 - [x] Modlar: MANUAL, HOLD, AUTO, GUIDED (go-to), RTL — uygulandı ve
       MISSION_START/DO_REPOSITION/NAV_RETURN_TO_LAUNCH üzerinden test edildi.
-- [x] Failsafe (Pi tarafı): GCS bağlantısı koparsa (`GCS_FS_TIMEOUT_S`,
-      varsayılan 3 sn) motorlar nötre düşüyor. Batarya düşerse failsafe
-      henüz yok (batarya verisi Pi'ye hiç ulaşmıyor, yukarıdaki not).
+- [x] Failsafe (Pi tarafı): GCS bağlantısı koparsa (`FS_GCS_ENABLE` +
+      `FS_TIMEOUT`, varsayılan açık / 3 sn — 2026-10-02'ye kadar adı
+      `GCS_FS_TIMEOUT_S`'ti) motorlar nötre düşüyor. Düşük batarya
+      failsafe'i `BATT_LOW_VOLT`/`BATT_FS_ENABLE` ile var (varsayılan kapalı).
+
+> **2026-10-02 — Mimari inceleme (Faz 0):** otopilotun hedef mimariye
+> (STM32/FreeRTOS + ROS 2) göre boşluk analizi, BAHR-GCS uyumluluk matrisi,
+> bulunup düzeltilen hatalar ve karar listesi artık bahr-pilot reposunda:
+> `docs/ARCHITECTURE_REVIEW.md` ve `docs/BAHR_GCS_ARCHITECTURE.md`. Bu
+> bölümdeki yollar repo ayrılmadan önceki düzene göre; Python paketi artık
+> bahr-pilot reposunun içinde `bahr_pilot/` alt klasöründe ve **repo
+> kökünden** çalıştırılıyor (`python -m bahr_pilot.vehicle`).
 - [x] Derinlik: `DISTANCE_SENSOR` + `NAMED_VALUE_FLOAT` (`water_temp`) —
       `bahr_pilot/sensors.py` + `bahr_pilot/vehicle.py` zaten gönderiyor.
 - [x] Ham veri kaydı: GNSS + derinlik + IMU + batarya, zaman damgalı
