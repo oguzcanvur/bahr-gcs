@@ -10,6 +10,8 @@ Biçim [Keep a Changelog](https://keepachangelog.com/) temel alınarak tutulur.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-04
+
 ### Eklenen
 - Özel otopilotun (bahr_pilot) yeni parametreleri için Türkçe açıklamalı, aralık denetimli sözlük girişleri
   (`gcs/param_meta.py`): `ATC_STR_ANG_P` (direksiyon açı kazancı), yeni **Geofence (sanal çit)** sayfası
@@ -101,6 +103,7 @@ altına eklenip bir sürüm etiketlendiğinde kendi başlığına taşınır.
   Ground Control Station) olarak belirlendi; marka kimliği `gcs/theme.py`
   içinde tek kaynaktan yönetiliyor
 
-[Unreleased]: https://github.com/oguzcanvur/bahr-gcs/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/oguzcanvur/bahr-gcs/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/oguzcanvur/bahr-gcs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oguzcanvur/bahr-gcs/compare/v0.0.0...v0.1.0
 [0.0.0]: https://github.com/oguzcanvur/bahr-gcs/releases/tag/v0.0.0
