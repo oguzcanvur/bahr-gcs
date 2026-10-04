@@ -197,15 +197,13 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
                "asla dönmez — ArduPilot'un kendi parametresi değil, bu araç için "
                "eklendi. Varsayılan 6.",
                minimum=1, maximum=16, step=1, decimals=0),
-            _p("RCMAP_OVERRIDE", "Elle devralma kanalı",
-               "Açıkken kumanda, Pi'yi tamamen baypas ederek motorları doğrudan "
-               "sürer. ArduPilot'un kendi parametresi değil, bu araç için "
-               "eklendi. Varsayılan 5.",
-               minimum=1, maximum=16, step=1, decimals=0),
             _p("MODE_CH", "Mod anahtarı kanalı",
                "Uçuş modunu değiştiren kumanda anahtarının bağlı olduğu kanal. Bu "
                "kanalın PWM değeri 6 aralığa bölünür ve MODE1…MODE6 parametreleri "
-               "hangi aralıkta hangi modun seçileceğini söyler.",
+               "hangi aralıkta hangi modun seçileceğini söyler. 3 konumlu bir anahtarda "
+               "genelde 1., 4. ve 6. aralık kullanılır. Özel otopilotta (bahr_pilot) "
+               "MODEn = MANUAL olan aralıklarda kumanda motorları doğrudan, Pi'ye "
+               "ve yer istasyonuna bağlı olmadan sürer; varsayılan kanal 5.",
                minimum=1, maximum=16, step=1, decimals=0),
             _p("RC1_MIN", "Kanal 1 min",
                "Direksiyon çubuğu sonuna kadar itildiğinde okunan en düşük PWM "
@@ -354,6 +352,11 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
                "Direksiyon kontrolcüsünün giriş filtresi kesme frekansı. Düşürmek "
                "dalga gürültüsünü süzer ama tepkiyi geciktirir.",
                unit="Hz", minimum=0.5, maximum=50, step=0.5, decimals=1),
+            _p("ATC_STR_ANG_P", "Direksiyon açı kazancı",
+               "Yön hatasını istenen dönüş hızına çeviren kazanç. Büyütmek tekneyi "
+               "hedef yöne daha sert çevirir; fazlası hedefi geçip geri dönme "
+               "(aşım) salınımına yol açar.",
+               unit="1/s", minimum=0, maximum=10, step=0.1, decimals=2),
             _p("ATC_STR_RAT_MAX", "Maksimum dönüş hızı",
                "Otopilotun isteyebileceği en yüksek dönüş hızı.",
                unit="°/s", minimum=0, maximum=1000, step=10, decimals=0),
@@ -467,6 +470,43 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
         ],
     ),
     (
+        "fence",
+        "Geofence (sanal çit)",
+        [
+            _p("FENCE_ENABLE", "Geofence açık mı",
+               "Teknenin gidebileceği alanı sınırlar. Açıkken sınır aşılmak üzereyken "
+               "(durma mesafesi kadar önce) FENCE_ACTION uygulanır. Çizilmemiş bir çit "
+               "tekneyi durdurmasın diye varsayılan kapalıdır.",
+               choices={0: "0 — Kapalı", 1: "1 — Açık"}),
+            _p("FENCE_TYPE", "Çit türü",
+               "Hangi sınırlar denetlensin (bit maskesi): 2 = ev konumu etrafında daire "
+               "(FENCE_RADIUS), 4 = araca MAVLink ile yüklenen çokgen ve daireler "
+               "(içeride kalınacak ya da girilmeyecek alanlar). 6 = ikisi birden.",
+               choices={2: "2 — Sadece daire", 4: "4 — Sadece yüklenen şekiller",
+                        6: "6 — Daire ve yüklenen şekiller"}),
+            _p("FENCE_ACTION", "Çit ihlalinde davranış",
+               "Sınıra gelindiğinde teknenin ne yapacağı. 1: eve dön, olmuyorsa dur; "
+               "2: olduğu yerde dur (Hold). Dur seçilirse tekne çitin dışında "
+               "kalabilir; içeri kumandayla geri sürülmelidir.",
+               choices={0: "0 — Sadece rapor et", 1: "1 — Eve dön (RTL) veya Hold",
+                        2: "2 — Dur (HOLD)", 5: "5 — Sonlandır"}),
+            _p("FENCE_RADIUS", "Çit yarıçapı",
+               "Ev konumu etrafındaki dairenin yarıçapı (FENCE_TYPE'ta daire seçiliyse).",
+               unit="m", minimum=0, maximum=10000, step=10, decimals=0),
+            _p("FENCE_MARGIN", "Çit payı",
+               "Bir ihlal ancak tekne çitin bu kadar içine döndükten sonra temizlenir; "
+               "sınır boyunca giderken sürekli açılıp kapanmayı önler.",
+               unit="m", minimum=0, maximum=100, step=0.5, decimals=1),
+            _p("FENCE_COAST_DECEL", "Süzülme yavaşlaması",
+               "Bu araca özgü: motorlar boşta iken teknenin kendiliğinden ortalama ne kadar "
+               "yavaşladığı. Çit, teknenin duracağı noktayı bununla önceden hesaplar. Teknenin "
+               "frenleme gücü değil süzülmesi: motorları kesip kaç metrede durduğunu ölçerek "
+               "bulun (varsayılan 0,3 yer tutucudur). Küçük girilirse çit erken, büyük girilirse "
+               "geç devreye girer.",
+               unit="m/s²", minimum=0.05, maximum=5, step=0.05, decimals=2),
+        ],
+    ),
+    (
         "sonar",
         "Sonar / derinlik ölçer",
         [
@@ -520,6 +560,31 @@ GROUPS: list[tuple[str, str, list[ParamInfo]]] = [
                "Doğru girilmesi derinlik verisinin tekne yalpalarken de tutarlı "
                "kalmasını sağlar.", unit="m", minimum=-5, maximum=5, step=0.01,
                decimals=3),
+            _p("SONAR_SPIKE", "Tepe eşiği",
+               "Bu araca özgü: derinlik okuması son okumaların öngördüğü dipten bu kadar "
+               "metreden (ya da derinliğin %5'inden, hangisi büyükse) fazla sapıyorsa tepe "
+               "(balık, yosun, kabarcık) sayılıp atılır. Küçültmek daha çok okumayı reddeder; "
+               "büyütmek sahte tepeleri haritaya geçirir.",
+               unit="m", minimum=0.05, maximum=10, step=0.05, decimals=2),
+            _p("SONAR_LATENCY", "Sonar gecikmesi",
+               "Bu araca özgü: derinlik okumasının konumdan ne kadar geç geldiği. Teknenin "
+               "hızıyla çarpılıp okumanın konumu o kadar geriye alınır; dik bir şevde yanlış "
+               "girilirse derinlik, hız × gecikme × eğim kadar kayar. Ölçülmediyse 0 bırakın.",
+               unit="s", minimum=0, maximum=5, step=0.05, decimals=2),
+            _p("BATHY_SPACING", "Örnek aralığı",
+               "Bu araca özgü: batimetri örnekleri tekne bu kadar metre gittikçe kaydedilir "
+               "(saniyede bir değil). Duran tekne örnek üretmez.",
+               unit="m", minimum=0.1, maximum=100, step=0.1, decimals=1),
+            _p("BATHY_MAX_HACC", "En kötü konum doğruluğu",
+               "Bu araca özgü: konum doğruluğu bundan kötüyse örnek DÜŞÜK KALİTE işaretlenir "
+               "(RTK sabit ~0,05 m, float ~0,25 m, standart GNSS birkaç metre).",
+               unit="m", minimum=0.01, maximum=50, step=0.05, decimals=2),
+            _p("BATHY_MAX_SPEED", "En yüksek ölçüm hızı",
+               "Bu araca özgü: tekne bundan hızlıysa örnek DÜŞÜK KALİTE işaretlenir.",
+               unit="m/s", minimum=0.1, maximum=20, step=0.1, decimals=1),
+            _p("BATHY_MAX_TILT", "En büyük yatma",
+               "Bu araca özgü: tekne dikeyden bundan fazla yatıksa örnek DÜŞÜK KALİTE işaretlenir.",
+               unit="°", minimum=1, maximum=90, step=1, decimals=0),
         ],
     ),
     (

@@ -1281,6 +1281,7 @@ class SetupWindow(QWidget):
         "tuning": "Direksiyon ve hız",
         "battery": "Batarya",
         "failsafe": "Failsafe",
+        "fence": "Geofence (sanal çit)",
         "sonar": "Sonar / derinlik",
         "gps": "GPS ve pusula",
         "arming": "Arm koşulları",
@@ -1392,7 +1393,7 @@ class SetupWindow(QWidget):
                                            CompassPage(self._mavlink))
 
         for key in ("radio", "modes", "navigation", "tuning", "battery",
-                    "failsafe", "sonar", "gps", "arming"):
+                    "failsafe", "fence", "sonar", "gps", "arming"):
             title, infos = groups[key]
             self._add_page(key, self._GROUP_TITLES[key],
                            ParamGroupPage(self._mavlink, title, infos))

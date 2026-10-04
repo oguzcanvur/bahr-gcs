@@ -10,6 +10,20 @@ Biçim [Keep a Changelog](https://keepachangelog.com/) temel alınarak tutulur.
 
 ## [Unreleased]
 
+### Eklenen
+- Özel otopilotun (bahr_pilot) yeni parametreleri için Türkçe açıklamalı, aralık denetimli sözlük girişleri
+  (`gcs/param_meta.py`): `ATC_STR_ANG_P` (direksiyon açı kazancı), yeni **Geofence (sanal çit)** sayfası
+  (`FENCE_ENABLE`, `FENCE_TYPE`, `FENCE_ACTION`, `FENCE_RADIUS`, `FENCE_MARGIN`, `FENCE_COAST_DECEL`) ve ekolot
+  sayfasına `SONAR_SPIKE`, `SONAR_LATENCY`, `BATHY_SPACING`, `BATHY_MAX_HACC`, `BATHY_MAX_SPEED`,
+  `BATHY_MAX_TILT`. Kurulum penceresine "Geofence" sayfası eklendi (`gcs/setup_window.py`). GCS'nin diğer
+  davranışı değişmedi.
+
+### Değişen
+- Parametre sözlüğünden `RCMAP_OVERRIDE` kaldırıldı (v0.1.0'da eklenmişti);
+  yerine ArduPilot'un kendi `MODE_CH` / `MODE1…MODE6` parametreleri
+  kullanılıyor, `MODE_CH` açıklaması özel otopilotun (bahr_pilot) kumanda
+  mod anahtarını anlatacak şekilde güncellendi.
+
 ## [0.1.0] — 2026-10-01
 
 ### Eklenen

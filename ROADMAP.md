@@ -259,10 +259,10 @@ modu) — mevcut MAVLink/UDP kodu hiç değişmeden çalışsın.
 - [x] Nucleo sürücüsü (Python tarafı) — `bahr_pilot/nucleo_link.py`, artık çift
       yönlü (motor komutu + RC haritası ayarı gönderiyor, telemetri
       okuyor — bkz. bölüm 5'teki `pi_link` notu). `bahr_pilot/vehicle.py`,
-      BAHR-GCS'nin `RCMAP_ROLL/RCMAP_THROTTLE/RCMAP_ARM/RCMAP_OVERRIDE` ve
+      BAHR-GCS'nin `RCMAP_ROLL/RCMAP_THROTTLE/RCMAP_ARM/MODE_CH` ve
       `RC1..8_MIN/MAX/TRIM/REVERSED` parametrelerini (ve RadioPage'in
       `MAV_CMD_PREFLIGHT_CALIBRATION` akışını) gerçekten işliyor ve her
-      değişiklikte Nucleo'ya aktarıyor. `RCMAP_ARM`/`RCMAP_OVERRIDE`
+      değişiklikte Nucleo'ya aktarıyor. `RCMAP_ARM`/`MODE_CH`
       ArduPilot'ta olmayan, bu araç için `gcs/param_meta.py`'ye eklenen 2
       yeni parametre — ikisi de var olan parametre sayfasında aynı
       desenle (RCMAP_ROLL/THROTTLE gibi) görünüyor, yeni bir GCS ekranı
@@ -287,6 +287,15 @@ modu) — mevcut MAVLink/UDP kodu hiç değişmeden çalışsın.
       `GCS_FS_TIMEOUT_S`'ti) motorlar nötre düşüyor. Düşük batarya
       failsafe'i `BATT_LOW_VOLT`/`BATT_FS_ENABLE` ile var (varsayılan kapalı).
 
+> **2026-10-02 — Kumanda mod anahtarı:** eski tek "elle devralma" (CH5)
+> anahtarının yerini ArduPilot tarzı mod anahtarı aldı: `MODE_CH` (varsayılan
+> CH5) kanalı 6 PWM aralığına bölünür, `MODE1..6` her aralığın modunu
+> söyler (varsayılan 3 konumlu anahtar: MANUAL / HOLD / AUTO). MANUAL olan
+> aralıklarda STM motorları kumandadan kendisi sürer (Pi'siz); diğer modları
+> Pi uygular. Kumanda MANUAL'dayken GCS başka moda geçiremez (komut reddedilir).
+> Yani yukarıdaki satırlardaki `MODE_CH` (eski adı `RCMAP_OVERRIDE`) artık bir
+> ON/OFF anahtarı değil, bu mod anahtarının kanalı.
+>
 > **2026-10-02 — Mimari inceleme (Faz 0):** otopilotun hedef mimariye
 > (STM32/FreeRTOS + ROS 2) göre boşluk analizi, BAHR-GCS uyumluluk matrisi,
 > bulunup düzeltilen hatalar ve karar listesi artık bahr-pilot reposunda:
@@ -294,6 +303,15 @@ modu) — mevcut MAVLink/UDP kodu hiç değişmeden çalışsın.
 > bölümdeki yollar repo ayrılmadan önceki düzene göre; Python paketi artık
 > bahr-pilot reposunun içinde `bahr_pilot/` alt klasöründe ve **repo
 > kökünden** çalıştırılıyor (`python -m bahr_pilot.vehicle`).
+>
+> **2026-10-04 — Donanım gerektirmeyen fazlar:** durum kestirimi, hat izleme,
+> yön/hız kontrolü, failsafe, geofence + güvenli RTL, parametre doğrulama ve
+> kalıcılık, ekolot süzgeci, batimetri örnekleme + kalite sınıflaması, görev
+> günlüğü, sağlık tablosu ve bir tekne/sensör simülatörü (SITL) bahr-pilot
+> reposunda yazıldı ve simülasyonda ölçüldü (`docs/PHASE_REPORTS.md`,
+> `docs/SITL.md`). **Hiçbiri gerçek donanımda denenmedi;** kazançlar, gürültüler
+> ve eşikler yer tutucu. Bu bölümdeki "Pi'de yapılacak" maddelerinden hangilerinin
+> kapandığı için faz raporlarına bakın.
 - [x] Derinlik: `DISTANCE_SENSOR` + `NAMED_VALUE_FLOAT` (`water_temp`) —
       `bahr_pilot/sensors.py` + `bahr_pilot/vehicle.py` zaten gönderiyor.
 - [x] Ham veri kaydı: GNSS + derinlik + IMU + batarya, zaman damgalı
@@ -393,7 +411,7 @@ modu) — mevcut MAVLink/UDP kodu hiç değişmeden çalışsın.
       steering normalize edilip (`RCn_MIN/MAX/TRIM/REVERSED`) karıştırılıyor
       (motor1=throttle-steering, motor2=throttle+steering). Varsayılanlar
       ArduPilot Rover'ın kendi kuralıyla aynı: `RCMAP_THROTTLE`=CH3,
-      `RCMAP_ROLL`=CH1, `RCMAP_OVERRIDE`=CH5. Kanal atamaları ve
+      `RCMAP_ROLL`=CH1, `MODE_CH`=CH5. Kanal atamaları ve
       kalibrasyon artık BAHR-GCS'nin **var olan** parametre sayfası +
       RadioPage ekranından ayarlanıyor — yeni bir GCS ekranı yazmaya gerek
       kalmadı. Diğer maddeler değişmedi: RC sinyali yoksa dur, RC var ama
@@ -409,7 +427,7 @@ modu) — mevcut MAVLink/UDP kodu hiç değişmeden çalışsın.
 - [x] **Kumandayla elle devralma — `failsafe.c` içinde RC override olarak
       uygulandı**, kanal ataması artık sabit `#define` değil (2026-10-01'de
       `RcMapConfig`'e taşındı, bkz. yukarıdaki pi_link/failsafe notları) —
-      `RCMAP_ARM`=CH6, `RCMAP_OVERRIDE`=CH5, `RCMAP_THROTTLE`=CH3,
+      `RCMAP_ARM`=CH6, `MODE_CH`=CH5, `RCMAP_THROTTLE`=CH3,
       `RCMAP_ROLL`=CH1 **varsayılan** değerler, BAHR-GCS'nin parametre
       sayfasından değiştirilebilir. Hâlâ gerçek AT9S Pro kanal ayarlarıyla
       karşılaştırılıp doğrulanmadı. Kumandada bu kanallara karşılık gelen
